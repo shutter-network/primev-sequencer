@@ -183,11 +183,11 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler) error {
 					// Log details of each bid
 					for _, bid := range bids {
 						zlog.Info().
-							Uint64("block_number", bid.BlockNumber).
+							Uint64("block_number", uint64(bid.BlockNumber)).
 							Int("tx_count", len(bid.TxHashes)).
 							Str("amount", bid.Amount).
-							Uint64("decay_start", bid.DecayStartTimestamp).
-							Uint64("decay_end", bid.DecayEndTimestamp).
+							Uint64("decay_start", uint64(bid.DecayStartTimestamp)).
+							Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
 							Str("slash_amount", bid.SlashAmount).
 							Msg("📋 Bid created")
 					}

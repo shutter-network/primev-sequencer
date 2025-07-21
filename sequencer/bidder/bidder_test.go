@@ -3,7 +3,6 @@ package bidder
 import (
 	"encoding/hex"
 	"testing"
-	"time"
 
 	"primev-poc/txhandler"
 
@@ -15,7 +14,8 @@ import (
 func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 	// Create a new transaction handler
 	txHandler := txhandler.NewTransactionHandler()
-	bidManager := NewBidManager(txHandler)
+	// Use 0.1 ETH for slash amount in tests
+	bidManager := NewBidManagerWithSlash(txHandler, "100000000000000000")
 
 	// Test case 1: No init transactions
 	t.Run("No init transactions", func(t *testing.T) {
@@ -46,7 +46,7 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 
 		// Verify bid structure
 		bid := bids[0]
-		assert.Equal(t, uint64(1000), bid.BlockNumber)
+		assert.Equal(t, int64(1000), bid.BlockNumber)
 		assert.Len(t, bid.TxHashes, 1)
 		assert.Equal(t, hash1.Hex(), bid.TxHashes[0])
 		assert.Equal(t, "1000000000000000000", bid.Amount)     // 1 ETH
@@ -68,10 +68,10 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 	t.Run("Multiple transactions same block", func(t *testing.T) {
 		// Clear previous transactions by creating a new handler
 		txHandler = txhandler.NewTransactionHandler()
-		bidManager = NewBidManager(txHandler)
+		bidManager = NewBidManagerWithSlash(txHandler, "100000000000000000")
 
 		// Create multiple transactions for the same block
-		block := uint64(2000)
+		block := int64(2000)
 		hashes := []common.Hash{
 			common.HexToHash("0x2222222222222222222222222222222222222222222222222222222222222222"),
 			common.HexToHash("0x3333333333333333333333333333333333333333333333333333333333333333"),
@@ -80,7 +80,7 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 		for i, hash := range hashes {
 			encryptedTx := &txhandler.EncryptedTransaction{
 				EonID:          1,
-				ScheduledBlock: block,
+				ScheduledBlock: uint64(block),
 				EncryptedTx:    []byte("encrypted_data_" + string(rune(i+2))),
 				TxHash:         []byte("hash_" + string(rune(i+2))),
 			}
@@ -95,7 +95,7 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 
 		// Verify bid contains both transactions
 		bid := bids[0]
-		assert.Equal(t, block, bid.BlockNumber)
+		assert.Equal(t, int64(block), bid.BlockNumber)
 		assert.Len(t, bid.TxHashes, 2)
 		assert.Len(t, bid.RawTransactions, 2)
 
@@ -111,22 +111,22 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 	t.Run("Multiple transactions different blocks", func(t *testing.T) {
 		// Clear previous transactions
 		txHandler = txhandler.NewTransactionHandler()
-		bidManager = NewBidManager(txHandler)
+		bidManager = NewBidManagerWithSlash(txHandler, "100000000000000000")
 
 		// Create transactions for different blocks
 		testData := []struct {
 			hash  common.Hash
-			block uint64
+			block int64
 		}{
-			{common.HexToHash("0x4444444444444444444444444444444444444444444444444444444444444444"), 3000},
-			{common.HexToHash("0x5555555555555555555555555555555555555555555555555555555555555555"), 3001},
-			{common.HexToHash("0x6666666666666666666666666666666666666666666666666666666666666666"), 3000}, // Same block as first
+			{common.HexToHash("0x4444444444444444444444444444444444444444444444444444444444444444"), int64(3000)},
+			{common.HexToHash("0x5555555555555555555555555555555555555555555555555555555555555555"), int64(3001)},
+			{common.HexToHash("0x6666666666666666666666666666666666666666666666666666666666666666"), int64(3000)}, // Same block as first
 		}
 
 		for i, data := range testData {
 			encryptedTx := &txhandler.EncryptedTransaction{
 				EonID:          1,
-				ScheduledBlock: data.block,
+				ScheduledBlock: uint64(data.block),
 				EncryptedTx:    []byte("encrypted_data_" + string(rune(i+4))),
 				TxHash:         []byte("hash_" + string(rune(i+4))),
 			}
@@ -140,7 +140,7 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 		require.Len(t, bids, 2) // Should be two bids for two different blocks
 
 		// Verify bids
-		blockNumbers := make(map[uint64]int)
+		blockNumbers := make(map[int64]int)
 		for _, bid := range bids {
 			blockNumbers[bid.BlockNumber]++
 		}
@@ -150,93 +150,16 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 
 		// Find the bid for block 3000 and verify it has 2 transactions
 		for _, bid := range bids {
-			if bid.BlockNumber == 3000 {
+			switch bid.BlockNumber {
+			case 3000:
 				assert.Len(t, bid.TxHashes, 2)
 				assert.Len(t, bid.RawTransactions, 2)
-			} else if bid.BlockNumber == 3001 {
+			case 3001:
 				assert.Len(t, bid.TxHashes, 1)
 				assert.Len(t, bid.RawTransactions, 1)
 			}
 		}
 	})
-}
-
-func TestBid_GetBidValue(t *testing.T) {
-	currentTime := time.Now().UnixMilli()
-
-	// Test case 1: Before decay start
-	t.Run("Before decay start", func(t *testing.T) {
-		bid := &Bid{
-			Amount:              "1000000000000000000",       // 1 ETH
-			DecayStartTimestamp: uint64(currentTime + 10000), // 10 seconds in future
-			DecayEndTimestamp:   uint64(currentTime + 60000), // 1 minute in future
-		}
-
-		value, err := bid.GetBidValue()
-		require.NoError(t, err)
-		assert.Equal(t, "1000000000000000000", value.String())
-	})
-
-	// Test case 2: After decay end
-	t.Run("After decay end", func(t *testing.T) {
-		bid := &Bid{
-			Amount:              "1000000000000000000",       // 1 ETH
-			DecayStartTimestamp: uint64(currentTime - 60000), // 1 minute ago
-			DecayEndTimestamp:   uint64(currentTime - 10000), // 10 seconds ago
-		}
-
-		value, err := bid.GetBidValue()
-		require.NoError(t, err)
-		assert.Equal(t, "0", value.String())
-	})
-
-	// Test case 3: During decay (middle)
-	t.Run("During decay - middle", func(t *testing.T) {
-		bid := &Bid{
-			Amount:              "1000000000000000000",       // 1 ETH
-			DecayStartTimestamp: uint64(currentTime - 30000), // 30 seconds ago
-			DecayEndTimestamp:   uint64(currentTime + 30000), // 30 seconds in future
-		}
-
-		value, err := bid.GetBidValue()
-		require.NoError(t, err)
-
-		// Should be approximately 50% of original value (halfway through decay)
-		// Allow some variance due to timing precision
-		originalValue := int64(1000000000000000000)
-		actualValue := value.Int64()
-
-		// Should be between 40% and 60% of original (allowing for timing variance)
-		assert.True(t, actualValue >= originalValue*4/10)
-		assert.True(t, actualValue <= originalValue*6/10)
-	})
-
-	// Test case 4: Invalid amount
-	t.Run("Invalid amount", func(t *testing.T) {
-		bid := &Bid{
-			Amount:              "invalid_amount",
-			DecayStartTimestamp: uint64(currentTime - 10000),
-			DecayEndTimestamp:   uint64(currentTime + 10000),
-		}
-
-		_, err := bid.GetBidValue()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid bid amount")
-	})
-}
-
-func TestBid_String(t *testing.T) {
-	bid := &Bid{
-		TxHashes:            []string{"0x1111", "0x2222"},
-		Amount:              "1000000000000000000",
-		BlockNumber:         1234,
-		DecayStartTimestamp: 1609459200000, // 2021-01-01 00:00:00 UTC
-		DecayEndTimestamp:   1609459260000, // 2021-01-01 00:01:00 UTC
-	}
-
-	result := bid.String()
-	expected := "Bid{Block: 1234, TxCount: 2, Amount: 1000000000000000000, Decay: 1609459200000-1609459260000}"
-	assert.Equal(t, expected, result)
 }
 
 func TestBidManager_UpdateTransactionStatuses(t *testing.T) {

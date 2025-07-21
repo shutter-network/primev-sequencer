@@ -2,39 +2,40 @@ package bidder
 
 import (
 	"fmt"
-	"math/big"
 	"time"
 
 	"primev-poc/txhandler"
 
 	"github.com/ethereum/go-ethereum/common"
+	bidderapi "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 	"github.com/rs/zerolog/log"
 )
 
 //TODO: commitment has a txHash
 
-type Bid struct {
-	TxHashes            []string `json:"txHashes"`
-	Amount              string   `json:"amount"`
-	BlockNumber         uint64   `json:"blockNumber"`
-	DecayStartTimestamp uint64   `json:"decayStartTimestamp"`
-	DecayEndTimestamp   uint64   `json:"decayEndTimestamp"`
-	RevertingTxHashes   []string `json:"revertingTxHashes"`
-	RawTransactions     []string `json:"rawTransactions"`
-	SlashAmount         string   `json:"slashAmount"`
-}
+const DefaultSlashAmount = "0"
 
 type BidManager struct {
-	txHandler *txhandler.TransactionHandler
+	txHandler   *txhandler.TransactionHandler
+	slashAmount string
 }
 
 func NewBidManager(txHandler *txhandler.TransactionHandler) *BidManager {
 	return &BidManager{
-		txHandler: txHandler,
+		txHandler:   txHandler,
+		slashAmount: DefaultSlashAmount,
 	}
 }
 
-func (bm *BidManager) CreateBidsFromInitTransactions() ([]*Bid, error) {
+// For testing, allow setting a custom slash amount
+func NewBidManagerWithSlash(txHandler *txhandler.TransactionHandler, slashAmount string) *BidManager {
+	return &BidManager{
+		txHandler:   txHandler,
+		slashAmount: slashAmount,
+	}
+}
+
+func (bm *BidManager) CreateBidsFromInitTransactions() ([]*bidderapi.Bid, error) {
 	initTransactions := bm.txHandler.GetTransactionsByStatus(txhandler.StatusInit)
 
 	if len(initTransactions) == 0 {
@@ -59,7 +60,7 @@ func (bm *BidManager) CreateBidsFromInitTransactions() ([]*Bid, error) {
 		}
 	}
 
-	var bids []*Bid
+	var bids []*bidderapi.Bid
 
 	for blockNumber, transactions := range blockToTransactions {
 		hashes := blockToHashes[blockNumber]
@@ -93,7 +94,7 @@ func (bm *BidManager) CreateBidsFromInitTransactions() ([]*Bid, error) {
 	return bids, nil
 }
 
-func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txhandler.StoredTransaction, hashes []common.Hash) (*Bid, error) {
+func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txhandler.StoredTransaction, hashes []common.Hash) (*bidderapi.Bid, error) {
 	if len(transactions) == 0 {
 		return nil, fmt.Errorf("no transactions provided for block %d", blockNumber)
 	}
@@ -112,19 +113,19 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 
 	currentTime := time.Now().UnixMilli()
 
-	bid := &Bid{
+	bid := &bidderapi.Bid{
 		TxHashes:    txHashes,
 		Amount:      "1000000000000000000",
-		BlockNumber: blockNumber,
+		BlockNumber: int64(blockNumber),
 
-		DecayStartTimestamp: uint64(currentTime + 30000),  // 30 seconds from now
-		DecayEndTimestamp:   uint64(currentTime + 300000), // 5 minutes from now
+		DecayStartTimestamp: int64(currentTime + 30000),  // 30 seconds from now
+		DecayEndTimestamp:   int64(currentTime + 300000), // 5 minutes from now
 
 		RevertingTxHashes: []string{},
 
 		RawTransactions: rawTransactions,
 
-		SlashAmount: "0",
+		SlashAmount: bm.slashAmount,
 	}
 
 	return bid, nil
@@ -151,44 +152,4 @@ func (bm *BidManager) updateTransactionStatuses(hashes []common.Hash, newStatus 
 	}
 
 	return nil
-}
-
-func (bid *Bid) GetBidValue() (*big.Int, error) {
-	amount, ok := new(big.Int).SetString(bid.Amount, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid bid amount: %s", bid.Amount)
-	}
-
-	currentTime := uint64(time.Now().UnixMilli())
-
-	if currentTime < bid.DecayStartTimestamp {
-		return amount, nil
-	}
-
-	if currentTime >= bid.DecayEndTimestamp {
-		return big.NewInt(0), nil
-	}
-
-	totalDecayTime := bid.DecayEndTimestamp - bid.DecayStartTimestamp
-	elapsedDecayTime := currentTime - bid.DecayStartTimestamp
-
-	remainingRatio := new(big.Int).Sub(
-		new(big.Int).SetUint64(totalDecayTime),
-		new(big.Int).SetUint64(elapsedDecayTime),
-	)
-
-	currentValue := new(big.Int).Mul(amount, remainingRatio)
-	currentValue.Div(currentValue, new(big.Int).SetUint64(totalDecayTime))
-
-	return currentValue, nil
-}
-
-func (bid *Bid) String() string {
-	return fmt.Sprintf("Bid{Block: %d, TxCount: %d, Amount: %s, Decay: %d-%d}",
-		bid.BlockNumber,
-		len(bid.TxHashes),
-		bid.Amount,
-		bid.DecayStartTimestamp,
-		bid.DecayEndTimestamp,
-	)
 }
