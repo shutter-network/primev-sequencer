@@ -2,13 +2,18 @@ package bidder
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	"primev-poc/txhandler"
 
+	"context"
+
 	"github.com/ethereum/go-ethereum/common"
 	bidderapi "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 //TODO: commitment has a txHash
@@ -152,4 +157,60 @@ func (bm *BidManager) updateTransactionStatuses(hashes []common.Hash, newStatus 
 	}
 
 	return nil
+}
+
+// SubmitBidGRPC submits a bid to the mev-commit node and returns all Commitments from the stream.
+// For each commitment, updates the status of all tx_hashes in txHandler to StatusCommitted.
+func SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *bidderapi.Bid, txHandler *txhandler.TransactionHandler) ([]*bidderapi.Commitment, error) {
+	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
+	}
+	defer conn.Close()
+
+	client := bidderapi.NewBidderClient(conn)
+	stream, err := client.SendBid(ctx, bid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send bid: %w", err)
+	}
+
+	commitmentsCh := make(chan *bidderapi.Commitment)
+	errCh := make(chan error, 1)
+	var commitments []*bidderapi.Commitment
+
+	// Goroutine to receive commitments
+	go func() {
+		for {
+			commitment, err := stream.Recv()
+			if err != nil {
+				errCh <- err
+				close(commitmentsCh)
+				return
+			}
+			commitmentsCh <- commitment
+		}
+	}()
+
+	// Main loop: collect commitments and update txHandler
+	for {
+		select {
+		case <-ctx.Done():
+			return commitments, ctx.Err()
+		case err := <-errCh:
+			if err == io.EOF {
+				return commitments, nil
+			}
+			return commitments, err
+		case commitment, ok := <-commitmentsCh:
+			if !ok {
+				return commitments, nil
+			}
+			commitments = append(commitments, commitment)
+			// Update all tx_hashes in txHandler to StatusCommitted
+			for _, txHashHex := range commitment.GetTxHashes() {
+				hash := common.HexToHash(txHashHex)
+				_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusCommitted)
+			}
+		}
+	}
 }

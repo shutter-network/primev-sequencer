@@ -26,6 +26,7 @@ var (
 	upstreamRPCURL          string
 	keyperSetManagerAddress string
 	keyBroadcastAddress     string
+	grpcAddr                string
 )
 
 func main() {
@@ -54,9 +55,11 @@ func Cmd() *cobra.Command {
 	rootCmd.Flags().StringVar(&upstreamRPCURL, "upstream-rpc", "http://localhost:8546", "Upstream RPC URL to proxy requests to")
 	rootCmd.Flags().StringVar(&keyperSetManagerAddress, "keyper-set-manager-address", "", "Shutter KeyperSetManager contract address")
 	rootCmd.Flags().StringVar(&keyBroadcastAddress, "key-broadcast-address", "", "Shutter Key Broadcast contract address")
+	rootCmd.Flags().StringVar(&grpcAddr, "grpc-addr", "", "Address of the PrimeV gRPC bidder node")
 
 	rootCmd.MarkFlagRequired("keyper-set-manager-address")
 	rootCmd.MarkFlagRequired("key-broadcast-address")
+	rootCmd.MarkFlagRequired("grpc-addr")
 
 	return rootCmd
 }
@@ -65,6 +68,7 @@ func startSequencer() error {
 	zlog.Info().
 		Str("rpc-port", rpcPort).
 		Str("upstream-rpc", upstreamRPCURL).
+		Str("grpc-addr", grpcAddr).
 		Msg("Starting PrimeV sequencer with integrated modules")
 
 	txHandler := startTransactionHandler()
@@ -74,7 +78,7 @@ func startSequencer() error {
 		return fmt.Errorf("failed to start RPC module: %w", err)
 	}
 
-	err = startSequencerModule(txHandler)
+	err = startSequencerModule(txHandler, grpcAddr)
 	if err != nil {
 		return fmt.Errorf("failed to start sequencer module: %w", err)
 	}
@@ -139,27 +143,23 @@ func startRPCModule(txHandler *txhandler.TransactionHandler) (*http.Server, erro
 	return httpServer, nil
 }
 
-func startSequencerModule(txHandler *txhandler.TransactionHandler) error {
+func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr string) error {
 	zlog.Info().Msg("Starting sequencer core module")
 
-	// Initialize bid manager
 	bidManager := bidder.NewBidManager(txHandler)
 
 	go func() {
 		zlog.Info().Msg("Sequencer core module running")
 
-		// Status reporting ticker (every 30 seconds)
 		statusTicker := time.NewTicker(30 * time.Second)
 		defer statusTicker.Stop()
 
-		// Bid creation ticker (every 60 seconds)
 		bidTicker := time.NewTicker(60 * time.Second)
 		defer bidTicker.Stop()
 
 		for {
 			select {
 			case <-statusTicker.C:
-				// Report transaction handler status
 				count := txHandler.GetTransactionCount()
 				statusCounts := txHandler.GetStatusCounts()
 				zlog.Info().
@@ -168,7 +168,6 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler) error {
 					Msg("Transaction handler status")
 
 			case <-bidTicker.C:
-				// Create bids from init transactions
 				bids, err := bidManager.CreateBidsFromInitTransactions()
 				if err != nil {
 					zlog.Error().Err(err).Msg("Failed to create bids from init transactions")
@@ -180,7 +179,6 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler) error {
 						Int("bid_count", len(bids)).
 						Msg("Created bids from init transactions")
 
-					// Log details of each bid
 					for _, bid := range bids {
 						zlog.Info().
 							Uint64("block_number", uint64(bid.BlockNumber)).
@@ -190,11 +188,23 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler) error {
 							Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
 							Str("slash_amount", bid.SlashAmount).
 							Msg("📋 Bid created")
-					}
 
-					// Here you would typically submit the bids to PrimeV
-					// For now, we just log them
-					zlog.Info().Msg("Bids would be submitted to PrimeV bidder auction")
+						ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+						commitments, err := bidder.SubmitBidGRPC(ctx, grpcAddr, bid, txHandler)
+						cancel()
+						if err != nil {
+							zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
+							continue
+						}
+						zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
+						for _, c := range commitments {
+							zlog.Info().
+								Strs("tx_hashes", c.GetTxHashes()).
+								Str("provider_address", c.GetProviderAddress()).
+								Str("commitment_digest", c.GetCommitmentDigest()).
+								Msg("Commitment received and transactions marked as committed")
+						}
+					}
 				}
 			}
 		}

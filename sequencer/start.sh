@@ -65,4 +65,5 @@ echo ""
     --upstream-rpc "$UPSTREAM_RPC" \
     --log-level "$LOG_LEVEL" \
     --keyper-set-manager-address "$KEYPER_SET_MANAGER_ADDRESS" \
-    --key-broadcast-address "$KEY_BROADCAST_ADDRESS" 
+    --key-broadcast-address "$KEY_BROADCAST_ADDRESS" \
+    --grpc-addr "$GRPC_ADDR"
