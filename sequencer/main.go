@@ -3,37 +3,37 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/address"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/env"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/keys"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2p"
 	"github.com/spf13/cobra"
 
 	"primev-poc/bidder"
+	primevp2p "primev-poc/p2p"
 	"primev-poc/rpc"
 	"primev-poc/txhandler"
 )
 
 var (
 	logLevel string
-
-	rpcPort                 string
-	upstreamRPCURL          string
-	keyperSetManagerAddress string
-	keyBroadcastAddress     string
-	grpcAddr                string
 )
 
 func main() {
 	status := 0
 
 	if err := Cmd().Execute(); err != nil {
-		log.Printf("failed running server: %v", err)
+		zlog.Error().Err(err).Msg("failed running server")
 		status = 1
 	}
 	os.Exit(status)
@@ -51,31 +51,93 @@ func Cmd() *cobra.Command {
 	}
 
 	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
-	rootCmd.Flags().StringVar(&rpcPort, "rpc-port", "8545", "Port for encrypted RPC server to listen on")
-	rootCmd.Flags().StringVar(&upstreamRPCURL, "upstream-rpc", "http://localhost:8546", "Upstream RPC URL to proxy requests to")
-	rootCmd.Flags().StringVar(&keyperSetManagerAddress, "keyper-set-manager-address", "", "Shutter KeyperSetManager contract address")
-	rootCmd.Flags().StringVar(&keyBroadcastAddress, "key-broadcast-address", "", "Shutter Key Broadcast contract address")
-	rootCmd.Flags().StringVar(&grpcAddr, "grpc-addr", "", "Address of the PrimeV gRPC bidder node")
-
-	rootCmd.MarkFlagRequired("keyper-set-manager-address")
-	rootCmd.MarkFlagRequired("key-broadcast-address")
-	rootCmd.MarkFlagRequired("grpc-addr")
 
 	return rootCmd
 }
 
 func startSequencer() error {
+	// Get config values from environment variables
+	rpcPort := getEnvOrDefault("RPC_PORT", "8545")
+	upstreamRPCURL := getEnvOrDefault("UPSTREAM_RPC_URL", "http://localhost:8546")
+	keyperSetManagerAddress := os.Getenv("KEYPER_SET_MANAGER_ADDRESS")
+	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
+	grpcAddr := os.Getenv("GRPC_ADDR")
+
+	// Validate required environment variables
+	if keyperSetManagerAddress == "" {
+		return fmt.Errorf("KEYPER_SET_MANAGER_ADDRESS environment variable is required")
+	}
+	if keyBroadcastAddress == "" {
+		return fmt.Errorf("KEY_BROADCAST_ADDRESS environment variable is required")
+	}
+	if grpcAddr == "" {
+		return fmt.Errorf("GRPC_ADDR environment variable is required")
+	}
+
 	zlog.Info().
 		Str("rpc-port", rpcPort).
 		Str("upstream-rpc", upstreamRPCURL).
 		Str("grpc-addr", grpcAddr).
 		Msg("Starting PrimeV sequencer with integrated modules")
 
+	p2pConfig := p2p.Config{}
+	var p2pKey keys.Libp2pPrivate
+	p2pKeyString := os.Getenv("P2P_KEY")
+	if p2pKeyString == "" {
+		panic("P2P key not provided in the env")
+	}
+	if err := p2pKey.UnmarshalText([]byte(p2pKeyString)); err != nil {
+		panic("error unmarshalling P2P key")
+	}
+	p2pConfig.P2PKey = &p2pKey
+
+	bootstrapAddressesStringified := os.Getenv("P2P_BOOTSTRAP_ADDRESSES")
+	if bootstrapAddressesStringified == "" {
+		panic("bootstrap addresses not provided in the env")
+	}
+	bootstrapAddresses := strings.Split(bootstrapAddressesStringified, ",")
+
+	bootstrapP2PAddresses := make([]*address.P2PAddress, len(bootstrapAddresses))
+
+	for i, addr := range bootstrapAddresses {
+		bootstrapP2PAddresses[i] = address.MustP2PAddress(addr)
+	}
+	p2pConfig.CustomBootstrapAddresses = bootstrapP2PAddresses
+
+	p2pPort := os.Getenv("P2P_PORT")
+	if p2pPort == "" {
+		p2pPort = "23003"
+	}
+
+	p2pConfig.ListenAddresses = []*address.P2PAddress{
+		address.MustP2PAddress("/ip4/0.0.0.0/tcp/" + p2pPort),
+		address.MustP2PAddress("/ip4/0.0.0.0/udp/" + p2pPort + "/quic-v1"),
+		address.MustP2PAddress("/ip4/0.0.0.0/udp/" + p2pPort + "/quic-v1/webtransport"),
+		address.MustP2PAddress("/ip6/::/tcp/" + p2pPort),
+		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1"),
+		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1/webtransport"),
+	}
+	p2pEnviroment, err := strconv.ParseInt(os.Getenv("P2P_ENVIRONMENT"), 10, 0)
+	if err != nil {
+		return fmt.Errorf("failed to parse p2p environment: %w", err)
+	}
+	p2pConfig.Environment = env.Environment(p2pEnviroment)
+	p2pConfig.DiscoveryNamespace = os.Getenv("P2P_DISCOVERY_NAMESPACE")
+
 	txHandler := startTransactionHandler()
 
-	rpcServer, err := startRPCModule(txHandler)
+	p2p := primevp2p.NewP2P(&p2pConfig)
+
+	config := &rpc.Config{
+		Port:                    rpcPort,
+		UpstreamRPCURL:          upstreamRPCURL,
+		KeyperSetManagerAddress: keyperSetManagerAddress,
+		KeyBroadcastAddress:     keyBroadcastAddress,
+	}
+
+	rpcServer, err := rpc.NewRPCServer(config, txHandler)
 	if err != nil {
-		return fmt.Errorf("failed to start RPC module: %w", err)
+		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
 
 	err = startSequencerModule(txHandler, grpcAddr)
@@ -83,20 +145,17 @@ func startSequencer() error {
 		return fmt.Errorf("failed to start sequencer module: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	service.Run(ctx, p2p, rpcServer)
+
 	zlog.Info().Msg("All modules started successfully")
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	cancel()
 
 	zlog.Info().Msg("Shutting down all modules...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := rpcServer.Shutdown(ctx); err != nil {
-		zlog.Error().Err(err).Msg("Failed to shutdown RPC server gracefully")
-	}
 
 	zlog.Info().Msg("All modules stopped")
 	return nil
@@ -109,38 +168,6 @@ func startTransactionHandler() *txhandler.TransactionHandler {
 
 	zlog.Info().Msg("Transaction handler module started successfully")
 	return txHandler
-}
-
-func startRPCModule(txHandler *txhandler.TransactionHandler) (*http.Server, error) {
-	zlog.Info().
-		Str("port", rpcPort).
-		Msg("Starting encrypted RPC module")
-
-	config := &rpc.Config{
-		Port:                    rpcPort,
-		UpstreamRPCURL:          upstreamRPCURL,
-		KeyperSetManagerAddress: keyperSetManagerAddress,
-		KeyBroadcastAddress:     keyBroadcastAddress,
-	}
-
-	server, err := rpc.NewRPCServer(config, txHandler)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RPC server: %w", err)
-	}
-
-	httpServer := &http.Server{
-		Addr:    ":" + rpcPort,
-		Handler: server,
-	}
-
-	go func() {
-		zlog.Info().Str("address", httpServer.Addr).Msg("RPC module listening")
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			zlog.Fatal().Err(err).Msg("RPC module failed")
-		}
-	}()
-
-	return httpServer, nil
 }
 
 func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr string) error {
@@ -211,6 +238,13 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr stri
 	}()
 
 	return nil
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func setupLogging() {

@@ -2,12 +2,16 @@ package rpc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"primev-poc/shutter"
 	"primev-poc/txhandler"
+
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 
 	"github.com/rs/zerolog/log"
 )
@@ -63,8 +67,18 @@ func NewRPCServer(config *Config, txHandler *txhandler.TransactionHandler) (*RPC
 	}, nil
 }
 
-// GetEncryptor returns nil since we no longer have a stateful encryptor
-func (s *RPCServer) GetEncryptor() interface{} {
+func (s *RPCServer) Start(ctx context.Context, runner service.Runner) error {
+	httpServer := &http.Server{
+		Addr:    ":" + s.config.Port,
+		Handler: s,
+	}
+	runner.Go(httpServer.ListenAndServe)
+	runner.Go(func() error {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		return httpServer.Shutdown(shutdownCtx)
+	})
 	return nil
 }
 
