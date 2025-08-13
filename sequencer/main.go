@@ -17,6 +17,7 @@ import (
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/keys"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2p"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2pmsg"
 	"github.com/spf13/cobra"
 
 	"primev-poc/bidder"
@@ -62,6 +63,7 @@ func startSequencer() error {
 	keyperSetManagerAddress := os.Getenv("KEYPER_SET_MANAGER_ADDRESS")
 	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
 	grpcAddr := os.Getenv("GRPC_ADDR")
+	instanceId := os.Getenv("INSTANCE_ID")
 
 	// Validate required environment variables
 	if keyperSetManagerAddress == "" {
@@ -72,6 +74,13 @@ func startSequencer() error {
 	}
 	if grpcAddr == "" {
 		return fmt.Errorf("GRPC_ADDR environment variable is required")
+	}
+	if instanceId == "" {
+		return fmt.Errorf("INSTANCE_ID environment variable is required")
+	}
+	instanceIdUint64, err := strconv.ParseUint(instanceId, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse INSTANCE_ID: %w", err)
 	}
 
 	zlog.Info().
@@ -140,7 +149,7 @@ func startSequencer() error {
 		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
 
-	err = startSequencerModule(txHandler, grpcAddr)
+	err = startSequencerModule(txHandler, grpcAddr, p2p, instanceIdUint64)
 	if err != nil {
 		return fmt.Errorf("failed to start sequencer module: %w", err)
 	}
@@ -170,7 +179,7 @@ func startTransactionHandler() *txhandler.TransactionHandler {
 	return txHandler
 }
 
-func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr string) error {
+func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr string, p2p *primevp2p.P2P, instanceId uint64) error {
 	zlog.Info().Msg("Starting sequencer core module")
 
 	bidManager := bidder.NewBidManager(txHandler)
@@ -217,14 +226,37 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr stri
 							Msg("📋 Bid created")
 
 						ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-						commitments, err := bidder.SubmitBidGRPC(ctx, grpcAddr, bid, txHandler)
+						commitments, err := bidManager.SubmitBidGRPC(ctx, grpcAddr, bid)
 						cancel()
 						if err != nil {
 							zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
 							continue
 						}
 						zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
+
 						for _, c := range commitments {
+							err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
+								InstanceId:           instanceId,
+								TxHashes:             c.GetTxHashes(),
+								BidAmount:            c.GetBidAmount(),
+								BlockNumber:          c.GetBlockNumber(),
+								ReceivedBidDigest:    c.GetReceivedBidDigest(),
+								ReceivedBidSignature: c.GetReceivedBidSignature(),
+								CommitmentDigest:     c.GetCommitmentDigest(),
+								CommitmentSignature:  c.GetCommitmentSignature(),
+								ProviderAddress:      c.GetProviderAddress(),
+								DecayStartTimestamp:  c.GetDecayStartTimestamp(),
+								DecayEndTimestamp:    c.GetDecayEndTimestamp(),
+								DispatchTimestamp:    c.GetDispatchTimestamp(),
+								RevertingTxHashes:    c.GetRevertingTxHashes(),
+								SlashAmount:          c.GetSlashAmount(),
+							})
+							if err != nil {
+								zlog.Error().Err(err).Msg("Failed to send commitment")
+								continue
+							}
+							zlog.Info().Msg("Sent commitment")
+
 							zlog.Info().
 								Strs("tx_hashes", c.GetTxHashes()).
 								Str("provider_address", c.GetProviderAddress()).

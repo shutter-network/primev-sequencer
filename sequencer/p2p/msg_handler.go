@@ -9,20 +9,21 @@ import (
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2pmsg"
 )
 
-type MsgHandler struct {
+type DecryptionKeysMsgHandler struct {
 }
 
-func (mh *MsgHandler) MessagePrototypes() []p2pmsg.Message {
+func (mh *DecryptionKeysMsgHandler) MessagePrototypes() []p2pmsg.Message {
 	return []p2pmsg.Message{
 		&p2pmsg.DecryptionKeys{},
 	}
 }
 
-func (mh *MsgHandler) ValidateMessage(_ context.Context, msgUntyped p2pmsg.Message) (pubsub.ValidationResult, error) {
+func (mh *DecryptionKeysMsgHandler) ValidateMessage(_ context.Context, msgUntyped p2pmsg.Message) (pubsub.ValidationResult, error) {
 	msg, ok := msgUntyped.(*p2pmsg.DecryptionKeys)
 	if !ok {
-		return pubsub.ValidationReject, nil
+		return pubsub.ValidationReject, fmt.Errorf("unknown message type: %T", msgUntyped)
 	}
+
 	extra := msg.Extra.(*p2pmsg.DecryptionKeys_Service).Service
 	if extra == nil {
 		return pubsub.ValidationReject, nil
@@ -37,7 +38,7 @@ func (mh *MsgHandler) ValidateMessage(_ context.Context, msgUntyped p2pmsg.Messa
 	return pubsub.ValidationAccept, nil
 }
 
-func (mh *MsgHandler) HandleMessage(ctx context.Context, msg p2pmsg.Message) ([]p2pmsg.Message, error) {
+func (mh *DecryptionKeysMsgHandler) HandleMessage(ctx context.Context, msg p2pmsg.Message) ([]p2pmsg.Message, error) {
 	// TODO: Implement decryption keys handling
 	return []p2pmsg.Message{}, nil
 }

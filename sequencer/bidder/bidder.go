@@ -161,7 +161,7 @@ func (bm *BidManager) updateTransactionStatuses(hashes []common.Hash, newStatus 
 
 // SubmitBidGRPC submits a bid to the mev-commit node and returns all Commitments from the stream.
 // For each commitment, updates the status of all tx_hashes in txHandler to StatusCommitted.
-func SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *bidderapi.Bid, txHandler *txhandler.TransactionHandler) ([]*bidderapi.Commitment, error) {
+func (bm *BidManager) SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *bidderapi.Bid) ([]*bidderapi.Commitment, error) {
 	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -209,7 +209,7 @@ func SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *bidderapi.Bid, txH
 			// Update all tx_hashes in txHandler to StatusCommitted
 			for _, txHashHex := range commitment.GetTxHashes() {
 				hash := common.HexToHash(txHashHex)
-				_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusCommitted)
+				_ = bm.txHandler.UpdateTransactionStatus(hash, txhandler.StatusCommitted)
 			}
 		}
 	}
