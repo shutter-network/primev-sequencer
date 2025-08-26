@@ -3,6 +3,7 @@ package rpc
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"primev-poc/shutter"
 	"primev-poc/txhandler"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 
 	"github.com/rs/zerolog/log"
@@ -160,13 +162,36 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		return
 	}
 
+	txData, err := hex.DecodeString(rawTx[2:])
+	if err != nil {
+		log.Warn().
+			Str("method", req.Method).
+			Interface("id", req.ID).
+			Msg("Invalid transaction data format")
+		s.writeError(w, req.ID, -32602, "Invalid transaction data", nil)
+		return
+	}
+
+	txHash := crypto.Keccak256Hash(txData)
+
 	log.Info().
 		Str("method", req.Method).
 		Interface("id", req.ID).
-		Str("raw_tx", rawTx[:min(20, len(rawTx))]+"...").
+		Str("tx_hash", txHash.Hex()).
 		Msg("Processing encrypted transaction locally")
 
-	encryptedTx, txHash, err := shutter.EncryptTransaction(rawTx)
+	_, err = s.txHandler.GetTransaction(txHash)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("method", req.Method).
+			Interface("id", req.ID).
+			Msg("Failed to retrieve transaction locally")
+		s.writeSuccess(w, req.ID, txHash.Hex())
+		return
+	}
+
+	encryptedTx, _, err := shutter.EncryptTransaction(rawTx, txHash)
 	if err != nil {
 		log.Error().
 			Err(err).

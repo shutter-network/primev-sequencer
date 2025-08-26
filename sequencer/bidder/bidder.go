@@ -111,9 +111,8 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 	var txHashes []string
 	var rawTransactions []string
 
-	for i, hash := range hashes {
+	for _, hash := range hashes {
 		txHashes = append(txHashes, hash.Hex())
-		rawTransactions = append(rawTransactions, fmt.Sprintf("0x%x", transactions[i].EncryptedTx.EncryptedTx))
 	}
 
 	currentTime := time.Now().UnixMilli()

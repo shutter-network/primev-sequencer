@@ -8,7 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/contracts/v2/bindings/keybroadcastcontract"
@@ -41,7 +40,7 @@ func Initialize(cfg *Config) {
 		Msg("Initialized shutter package configuration")
 }
 
-func EncryptTransaction(rawTx string) (*txhandler.EncryptedTransaction, common.Hash, error) {
+func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedTransaction, common.Hash, error) {
 	if config == nil {
 		return nil, common.Hash{}, fmt.Errorf("shutter package not initialized - call Initialize() first")
 	}
@@ -67,8 +66,6 @@ func EncryptTransaction(rawTx string) (*txhandler.EncryptedTransaction, common.H
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to decode raw transaction: %w", err)
 	}
-
-	txHash := crypto.Keccak256Hash(txData)
 	identityHex := hex.EncodeToString(txHash.Bytes())
 
 	log.Debug().
