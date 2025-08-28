@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/address"
@@ -149,7 +150,7 @@ func startSequencer() error {
 		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
 
-	err = startSequencerModule(txHandler, grpcAddr, p2p, instanceIdUint64)
+	err = startSequencerModule(txHandler, p2p, grpcAddr, instanceIdUint64)
 	if err != nil {
 		return fmt.Errorf("failed to start sequencer module: %w", err)
 	}
@@ -179,7 +180,7 @@ func startTransactionHandler() *txhandler.TransactionHandler {
 	return txHandler
 }
 
-func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr string, p2p *primevp2p.P2P, instanceId uint64) error {
+func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2p.P2P, grpcAddr string, instanceId uint64) error {
 	zlog.Info().Msg("Starting sequencer core module")
 
 	bidManager := bidder.NewBidManager(txHandler)
@@ -190,7 +191,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr stri
 		statusTicker := time.NewTicker(30 * time.Second)
 		defer statusTicker.Stop()
 
-		bidTicker := time.NewTicker(60 * time.Second)
+		bidTicker := time.NewTicker(30 * time.Second)
 		defer bidTicker.Stop()
 
 		for {
@@ -223,9 +224,9 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr stri
 							Uint64("decay_start", uint64(bid.DecayStartTimestamp)).
 							Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
 							Str("slash_amount", bid.SlashAmount).
-							Msg("📋 Bid created")
+							Msg("Bid created")
 
-						ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 						commitments, err := bidManager.SubmitBidGRPC(ctx, grpcAddr, bid)
 						cancel()
 						if err != nil {
@@ -233,6 +234,15 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr stri
 							continue
 						}
 						zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
+
+						if len(commitments) == 0 {
+							zlog.Warn().Msg("No commitments received, remarking tx as init")
+							for _, txHashHex := range bid.TxHashes {
+								hash := common.HexToHash(txHashHex)
+								_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
+							}
+							continue
+						}
 
 						for _, c := range commitments {
 							err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
@@ -252,7 +262,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, grpcAddr stri
 								SlashAmount:          c.GetSlashAmount(),
 							})
 							if err != nil {
-								zlog.Error().Err(err).Msg("Failed to send commitment")
+								zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
 								continue
 							}
 							zlog.Info().Msg("Sent commitment")
@@ -285,8 +295,5 @@ func setupLogging() {
 		level = zerolog.InfoLevel
 	}
 	zerolog.SetGlobalLevel(level)
-
-	if logLevel == "debug" {
-		zlog.Logger = zlog.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	}
+	zlog.Logger = zlog.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 }

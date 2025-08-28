@@ -21,10 +21,10 @@ import (
 
 const (
 	// RPC server endpoint (from your logs, it's running on 8546)
-	rpcURL = "http://localhost:8546"
+	rpcURL = "http://localhost:8545"
 
 	// Gnosis Chiado testnet chain ID
-	chainID = 10200
+	chainID = 560048
 )
 
 type JSONRPCRequest struct {

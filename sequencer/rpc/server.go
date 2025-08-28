@@ -56,7 +56,7 @@ func NewRPCServer(config *Config, txHandler *txhandler.TransactionHandler) (*RPC
 		EthereumRPCURL:          config.UpstreamRPCURL,
 		KeyperSetManagerAddress: config.KeyperSetManagerAddress,
 		KeyBroadcastAddress:     config.KeyBroadcastAddress,
-		InclusionWindow:         25,
+		InclusionWindow:         10,
 	}
 
 	// Initialize the shutter package with configuration
@@ -180,13 +180,13 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		Str("tx_hash", txHash.Hex()).
 		Msg("Processing encrypted transaction locally")
 
-	_, err = s.txHandler.GetTransaction(txHash)
-	if err != nil {
-		log.Error().
-			Err(err).
+	tx, err := s.txHandler.GetTransaction(txHash)
+	if err == nil && tx != nil {
+		log.Debug().
 			Str("method", req.Method).
 			Interface("id", req.ID).
-			Msg("Failed to retrieve transaction locally")
+			Str("tx_hash", txHash.Hex()).
+			Msg("Transaction already exists locally")
 		s.writeSuccess(w, req.ID, txHash.Hex())
 		return
 	}
@@ -201,6 +201,8 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		s.writeError(w, req.ID, -32000, "Encryption failed", err.Error())
 		return
 	}
+
+	encryptedTx.EncryptedTx = txData
 
 	err = s.txHandler.StoreTransaction(txHash, encryptedTx)
 	if err != nil {

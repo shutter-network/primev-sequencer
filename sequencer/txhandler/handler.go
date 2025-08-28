@@ -9,6 +9,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var ErrNotFound = fmt.Errorf("transaction not found")
+
 type TransactionStatus string
 
 const (
@@ -96,7 +98,7 @@ func (th *TransactionHandler) GetTransaction(hash common.Hash) (*StoredTransacti
 
 	transaction, exists := th.transactions[hash]
 	if !exists {
-		return nil, fmt.Errorf("transaction %s not found", hash.Hex())
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, hash.Hex())
 	}
 
 	return transaction, nil

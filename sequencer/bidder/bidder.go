@@ -18,6 +18,7 @@ import (
 
 //TODO: commitment has a txHash
 
+const BidAmount = "30000000000"
 const DefaultSlashAmount = "0"
 
 type BidManager struct {
@@ -113,16 +114,17 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 
 	for _, hash := range hashes {
 		txHashes = append(txHashes, hash.Hex())
+		// rawTransactions = append(rawTransactions, hex.EncodeToString(transactions[i].EncryptedTx.EncryptedTx))
 	}
 
 	currentTime := time.Now().UnixMilli()
 
 	bid := &bidderapi.Bid{
 		TxHashes:    txHashes,
-		Amount:      "1000000000000000000",
+		Amount:      BidAmount,
 		BlockNumber: int64(blockNumber),
 
-		DecayStartTimestamp: int64(currentTime + 30000),  // 30 seconds from now
+		DecayStartTimestamp: int64(currentTime + 96000),  // 96 seconds from now
 		DecayEndTimestamp:   int64(currentTime + 300000), // 5 minutes from now
 
 		RevertingTxHashes: []string{},
@@ -199,6 +201,15 @@ func (bm *BidManager) SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *b
 			if err == io.EOF {
 				return commitments, nil
 			}
+			// Remark these tx as init as they need to be sent again
+			for _, txHashHex := range bid.TxHashes {
+				hash := common.HexToHash(txHashHex)
+				_ = bm.txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
+			}
+			log.Info().
+				Int("no of tx", len(bid.TxHashes)).
+				Err(err).
+				Msg("error receiving commitment")
 			return commitments, err
 		case commitment, ok := <-commitmentsCh:
 			if !ok {
