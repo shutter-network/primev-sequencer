@@ -233,20 +233,15 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 					commitments, err := bidManager.SubmitBidGRPC(ctx, grpcAddr, bid)
 					cancel()
-					if err != nil {
+					if err != nil || len(commitments) == 0 {
 						zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
-						continue
-					}
-					zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
-
-					if len(commitments) == 0 {
-						zlog.Warn().Msg("No commitments received, remarking tx as init")
 						for _, txHashHex := range bid.TxHashes {
 							hash := common.HexToHash(txHashHex)
 							_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
 						}
 						continue
 					}
+					zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
 
 					for _, c := range commitments {
 						err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
