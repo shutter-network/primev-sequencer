@@ -17,8 +17,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-//TODO: commitment has a txHash
-
 const (
 	BidAmount          = "30000000000"
 	DefaultSlashAmount = "0"
@@ -44,12 +42,12 @@ func NewBidManagerWithSlash(txHandler *txhandler.TransactionHandler, slashAmount
 	}
 }
 
-func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidderapi.Bid, error) {
+func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidderapi.Bid, []common.Hash, error) {
 	initTransactions := bm.txHandler.GetTransactionsByStatus(txhandler.StatusInit)
 
 	if len(initTransactions) == 0 {
 		log.Debug().Msg("No transactions with init status found")
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	log.Info().
@@ -86,7 +84,7 @@ func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidder
 			Err(err).
 			Uint64("block_number", blockNumber).
 			Msg("Failed to create bid for block")
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = bm.updateTransactionStatuses(hashesForBid, txhandler.StatusBidSubmitted)
@@ -103,7 +101,7 @@ func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidder
 		Str("bid_amount", bid.Amount).
 		Msg("Created bid for scheduled block and updated transaction statuses")
 
-	return bid, nil
+	return bid, hashesForBid, nil
 }
 
 func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txhandler.StoredTransaction, hashes []common.Hash) (*bidderapi.Bid, error) {
@@ -115,8 +113,8 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 		return nil, fmt.Errorf("mismatch between transactions and hashes count for block %d", blockNumber)
 	}
 
-	var txHashes []string
-	var rawTransactions []string
+	txHashes := make([]string, 0)
+	rawTransactions := make([]string, 0)
 
 	for _, transaction := range transactions {
 		// txHashes = append(txHashes, hash.Hex())

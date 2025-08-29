@@ -223,7 +223,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 				if bid != nil {
 					zlog.Info().
 						Uint64("block_number", uint64(bid.BlockNumber)).
-						Int("tx_count", len(bid.TxHashes)).
+						Int("tx_count", len(txHashes)).
 						Str("amount", bid.Amount).
 						Uint64("decay_start", uint64(bid.DecayStartTimestamp)).
 						Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
@@ -235,9 +235,12 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 					cancel()
 					if err != nil || len(commitments) == 0 {
 						zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
-						for _, txHashHex := range bid.TxHashes {
-							hash := common.HexToHash(txHashHex)
-							_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
+						for _, txHash := range txHashes {
+							err = txHandler.UpdateTransactionStatus(txHash, txhandler.StatusInit)
+							if err != nil {
+								zlog.Error().Err(err).Msg("Failed to update transaction status")
+								continue
+							}
 						}
 						continue
 					}

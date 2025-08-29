@@ -19,7 +19,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 
 	// Test case 1: No init transactions
 	t.Run("No init transactions", func(t *testing.T) {
-		bid, err := bidManager.CreateBidFromInitTransactions(1)
+		bid, _, err := bidManager.CreateBidFromInitTransactions(1)
 		require.NoError(t, err)
 		assert.Nil(t, bid)
 	})
@@ -40,7 +40,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create bid for block 500 (within max inclusion window)
-		bid, err := bidManager.CreateBidFromInitTransactions(500)
+		bid, _, err := bidManager.CreateBidFromInitTransactions(500)
 		require.NoError(t, err)
 		require.NotNil(t, bid)
 
@@ -86,7 +86,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 		}
 
 		// Create bid for block 1500 (within max inclusion window)
-		bid, err := bidManager.CreateBidFromInitTransactions(1500)
+		bid, _, err := bidManager.CreateBidFromInitTransactions(1500)
 		require.NoError(t, err)
 		require.NotNil(t, bid)
 
@@ -148,7 +148,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 		}
 
 		// Create bid for block 4000
-		bid, err := bidManager.CreateBidFromInitTransactions(4000)
+		bid, _, err := bidManager.CreateBidFromInitTransactions(4000)
 		require.NoError(t, err)
 		require.NotNil(t, bid)
 
@@ -195,7 +195,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 
 		// Try to create bid for block 2000 (past all max inclusion windows)
 		// The current implementation returns an error when no transactions are eligible
-		bid, err := bidManager.CreateBidFromInitTransactions(2000)
+		bid, _, err := bidManager.CreateBidFromInitTransactions(2000)
 		require.Error(t, err) // Should return error since no transactions are eligible
 		assert.Contains(t, err.Error(), "no transactions provided for block 2000")
 		assert.Nil(t, bid)
