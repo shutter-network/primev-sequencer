@@ -18,13 +18,14 @@ const (
 	StatusBidSubmitted TransactionStatus = "bidsubmitted"
 	StatusCommitted    TransactionStatus = "committed"
 	StatusFinalised    TransactionStatus = "finalised"
+	StatusBlocked      TransactionStatus = "blocked"
 )
 
 type EncryptedTransaction struct {
-	EonID          uint64
-	ScheduledBlock uint64
-	EncryptedTx    []byte
-	TxHash         []byte
+	EonID              uint64
+	MaxInclusionWindow uint64
+	EncryptedTx        []byte
+	TxHash             []byte
 }
 
 type StoredTransaction struct {
@@ -63,7 +64,7 @@ func (th *TransactionHandler) StoreTransaction(hash common.Hash, encryptedTx *En
 
 	log.Info().
 		Str("tx_hash", hash.Hex()).
-		Uint64("scheduled_block", encryptedTx.ScheduledBlock).
+		Uint64("max_inclusion_window", encryptedTx.MaxInclusionWindow).
 		Uint64("eon_id", encryptedTx.EonID).
 		Str("status", string(StatusInit)).
 		Msg("Transaction stored")
@@ -111,26 +112,6 @@ func (th *TransactionHandler) GetTransactionsByStatus(status TransactionStatus) 
 	var result []*StoredTransaction
 	for _, transaction := range th.transactions {
 		if transaction.Status == status {
-			encryptedTxCopy := transaction.EncryptedTx
-
-			result = append(result, &StoredTransaction{
-				EncryptedTx:    encryptedTxCopy,
-				Status:         transaction.Status,
-				SubmissionTime: transaction.SubmissionTime,
-			})
-		}
-	}
-
-	return result
-}
-
-func (th *TransactionHandler) GetTransactionsByBlock(blockNumber uint64) []*StoredTransaction {
-	th.mutex.RLock()
-	defer th.mutex.RUnlock()
-
-	var result []*StoredTransaction
-	for _, transaction := range th.transactions {
-		if transaction.EncryptedTx.ScheduledBlock == blockNumber {
 			encryptedTxCopy := transaction.EncryptedTx
 
 			result = append(result, &StoredTransaction{

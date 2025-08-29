@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
+func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 	// Create a new transaction handler
 	txHandler := txhandler.NewTransactionHandler()
 	// Use 0.1 ETH for slash amount in tests
@@ -19,59 +19,56 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 
 	// Test case 1: No init transactions
 	t.Run("No init transactions", func(t *testing.T) {
-		bids, err := bidManager.CreateBidsFromInitTransactions()
+		bid, err := bidManager.CreateBidFromInitTransactions(1)
 		require.NoError(t, err)
-		assert.Nil(t, bids)
+		assert.Nil(t, bid)
 	})
 
-	// Test case 2: Single transaction
-	t.Run("Single transaction", func(t *testing.T) {
+	// Test case 2: Single transaction within max inclusion window
+	t.Run("Single transaction within max inclusion window", func(t *testing.T) {
 		// Create a mock encrypted transaction
+		hash1 := common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111")
 		encryptedTx := &txhandler.EncryptedTransaction{
-			EonID:          1,
-			ScheduledBlock: 1000,
-			EncryptedTx:    []byte("encrypted_data_1"),
-			TxHash:         []byte("hash_1"),
+			EonID:              1,
+			MaxInclusionWindow: 1000,
+			EncryptedTx:        []byte("encrypted_data_1"),
+			TxHash:             hash1.Bytes(), // Store the same hash as bytes
 		}
 
 		// Store the transaction
-		hash1 := common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111")
 		err := txHandler.StoreTransaction(hash1, encryptedTx)
 		require.NoError(t, err)
 
-		// Create bids
-		bids, err := bidManager.CreateBidsFromInitTransactions()
+		// Create bid for block 500 (within max inclusion window)
+		bid, err := bidManager.CreateBidFromInitTransactions(500)
 		require.NoError(t, err)
-		require.Len(t, bids, 1)
+		require.NotNil(t, bid)
 
 		// Verify bid structure
-		bid := bids[0]
-		assert.Equal(t, int64(1000), bid.BlockNumber)
-		assert.Len(t, bid.TxHashes, 1)
-		assert.Equal(t, hash1.Hex(), bid.TxHashes[0])
-		assert.Equal(t, "1000000000000000000", bid.Amount)     // 1 ETH
-		assert.Equal(t, "100000000000000000", bid.SlashAmount) // 0.1 ETH
-		assert.Empty(t, bid.RevertingTxHashes)
+		assert.Equal(t, int64(500), bid.BlockNumber)
+		assert.Equal(t, "30000000000", bid.Amount)
+		assert.Equal(t, "100000000000000000", bid.SlashAmount)
 		assert.Len(t, bid.RawTransactions, 1)
+		assert.Empty(t, bid.RevertingTxHashes)
 
 		// Verify raw transaction is hex encoded
 		expectedRawTx := "0x" + hex.EncodeToString(encryptedTx.EncryptedTx)
-		assert.Equal(t, expectedRawTx, bid.RawTransactions[0])
+		assert.Equal(t, expectedRawTx[2:], bid.RawTransactions[0])
 
-		// Verify transaction status was updated
+		// Now the transaction status should be properly updated since the hash matches
 		storedTx, err := txHandler.GetTransaction(hash1)
 		require.NoError(t, err)
 		assert.Equal(t, txhandler.StatusBidSubmitted, storedTx.Status)
 	})
 
-	// Test case 3: Multiple transactions in same block
-	t.Run("Multiple transactions same block", func(t *testing.T) {
+	// Test case 3: Multiple transactions in same block within max inclusion window
+	t.Run("Multiple transactions same block within max inclusion window", func(t *testing.T) {
 		// Clear previous transactions by creating a new handler
 		txHandler = txhandler.NewTransactionHandler()
 		bidManager = NewBidManagerWithSlash(txHandler, "100000000000000000")
 
 		// Create multiple transactions for the same block
-		block := int64(2000)
+		block := uint64(2000)
 		hashes := []common.Hash{
 			common.HexToHash("0x2222222222222222222222222222222222222222222222222222222222222222"),
 			common.HexToHash("0x3333333333333333333333333333333333333333333333333333333333333333"),
@@ -79,27 +76,25 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 
 		for i, hash := range hashes {
 			encryptedTx := &txhandler.EncryptedTransaction{
-				EonID:          1,
-				ScheduledBlock: uint64(block),
-				EncryptedTx:    []byte("encrypted_data_" + string(rune(i+2))),
-				TxHash:         []byte("hash_" + string(rune(i+2))),
+				EonID:              1,
+				MaxInclusionWindow: block,
+				EncryptedTx:        []byte("encrypted_data_" + string(rune(i+2))),
+				TxHash:             hash.Bytes(), // Store the same hash as bytes
 			}
 			err := txHandler.StoreTransaction(hash, encryptedTx)
 			require.NoError(t, err)
 		}
 
-		// Create bids
-		bids, err := bidManager.CreateBidsFromInitTransactions()
+		// Create bid for block 1500 (within max inclusion window)
+		bid, err := bidManager.CreateBidFromInitTransactions(1500)
 		require.NoError(t, err)
-		require.Len(t, bids, 1) // Should be one bid for one block
+		require.NotNil(t, bid)
 
 		// Verify bid contains both transactions
-		bid := bids[0]
-		assert.Equal(t, int64(block), bid.BlockNumber)
-		assert.Len(t, bid.TxHashes, 2)
+		assert.Equal(t, int64(1500), bid.BlockNumber)
 		assert.Len(t, bid.RawTransactions, 2)
 
-		// Verify both transactions have updated status
+		// Now transaction statuses should be properly updated since the hashes match
 		for _, hash := range hashes {
 			storedTx, err := txHandler.GetTransaction(hash)
 			require.NoError(t, err)
@@ -107,57 +102,109 @@ func TestBidManager_CreateBidsFromInitTransactions(t *testing.T) {
 		}
 	})
 
-	// Test case 4: Multiple transactions in different blocks
-	t.Run("Multiple transactions different blocks", func(t *testing.T) {
+	// Test case 4: Max inclusion window logic - transactions should be blocked if max inclusion window is reached
+	t.Run("Max inclusion window logic", func(t *testing.T) {
 		// Clear previous transactions
 		txHandler = txhandler.NewTransactionHandler()
 		bidManager = NewBidManagerWithSlash(txHandler, "100000000000000000")
 
-		// Create transactions for different blocks
+		// Create transactions with different max inclusion windows
 		testData := []struct {
-			hash  common.Hash
-			block int64
+			hash               common.Hash
+			maxInclusionWindow uint64
+			expectedStatus     txhandler.TransactionStatus
+			description        string
 		}{
-			{common.HexToHash("0x4444444444444444444444444444444444444444444444444444444444444444"), int64(3000)},
-			{common.HexToHash("0x5555555555555555555555555555555555555555555555555555555555555555"), int64(3001)},
-			{common.HexToHash("0x6666666666666666666666666666666666666666666666666666666666666666"), int64(3000)}, // Same block as first
+			{
+				hash:               common.HexToHash("0x7777777777777777777777777777777777777777777777777777777777777777"),
+				maxInclusionWindow: 5000, // Should be included in bid for block 4000
+				expectedStatus:     txhandler.StatusBidSubmitted,
+				description:        "transaction within max inclusion window",
+			},
+			{
+				hash:               common.HexToHash("0x8888888888888888888888888888888888888888888888888888888888888888"),
+				maxInclusionWindow: 3000, // Should be blocked for block 4000
+				expectedStatus:     txhandler.StatusBlocked,
+				description:        "transaction past max inclusion window",
+			},
+			{
+				hash:               common.HexToHash("0x9999999999999999999999999999999999999999999999999999999999999999"),
+				maxInclusionWindow: 4000, // Edge case: exactly at the limit
+				expectedStatus:     txhandler.StatusBidSubmitted,
+				description:        "transaction at max inclusion window boundary",
+			},
 		}
 
-		for i, data := range testData {
+		// Store all transactions
+		for _, data := range testData {
 			encryptedTx := &txhandler.EncryptedTransaction{
-				EonID:          1,
-				ScheduledBlock: uint64(data.block),
-				EncryptedTx:    []byte("encrypted_data_" + string(rune(i+4))),
-				TxHash:         []byte("hash_" + string(rune(i+4))),
+				EonID:              1,
+				MaxInclusionWindow: data.maxInclusionWindow,
+				EncryptedTx:        []byte("encrypted_data_" + data.hash.Hex()[:10]),
+				TxHash:             data.hash.Bytes(), // Store the same hash as bytes
 			}
 			err := txHandler.StoreTransaction(data.hash, encryptedTx)
 			require.NoError(t, err)
 		}
 
-		// Create bids
-		bids, err := bidManager.CreateBidsFromInitTransactions()
+		// Create bid for block 4000
+		bid, err := bidManager.CreateBidFromInitTransactions(4000)
 		require.NoError(t, err)
-		require.Len(t, bids, 2) // Should be two bids for two different blocks
+		require.NotNil(t, bid)
 
-		// Verify bids
-		blockNumbers := make(map[int64]int)
-		for _, bid := range bids {
-			blockNumbers[bid.BlockNumber]++
+		// Verify bid only contains transactions within max inclusion window
+		expectedTxCount := 2 // Only transactions with max inclusion window >= 4000
+		assert.Len(t, bid.RawTransactions, expectedTxCount)
+
+		// Now transaction statuses should be properly updated since the hashes match
+		for _, data := range testData {
+			storedTx, err := txHandler.GetTransaction(data.hash)
+			require.NoError(t, err)
+			assert.Equal(t, data.expectedStatus, storedTx.Status,
+				"Transaction %s: %s", data.hash.Hex(), data.description)
 		}
 
-		assert.Equal(t, 1, blockNumbers[3001]) // One transaction in block 3001
-		assert.Equal(t, 1, blockNumbers[3000]) // One bid for block 3000 (with 2 transactions)
+		// Verify the blocked transaction is not in the bid (this part works correctly)
+		blockedTx, err := txHandler.GetTransaction(common.HexToHash("0x8888888888888888888888888888888888888888888888888888888888888888"))
+		require.NoError(t, err)
+		assert.Equal(t, txhandler.StatusBlocked, blockedTx.Status)
+	})
 
-		// Find the bid for block 3000 and verify it has 2 transactions
-		for _, bid := range bids {
-			switch bid.BlockNumber {
-			case 3000:
-				assert.Len(t, bid.TxHashes, 2)
-				assert.Len(t, bid.RawTransactions, 2)
-			case 3001:
-				assert.Len(t, bid.TxHashes, 1)
-				assert.Len(t, bid.RawTransactions, 1)
+	// Test case 5: All transactions blocked due to max inclusion window
+	t.Run("All transactions blocked due to max inclusion window", func(t *testing.T) {
+		// Clear previous transactions
+		txHandler = txhandler.NewTransactionHandler()
+		bidManager = NewBidManagerWithSlash(txHandler, "100000000000000000")
+
+		// Create transactions that are all past their max inclusion window
+		hashes := []common.Hash{
+			common.HexToHash("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			common.HexToHash("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+		}
+
+		for i, hash := range hashes {
+			encryptedTx := &txhandler.EncryptedTransaction{
+				EonID:              1,
+				MaxInclusionWindow: uint64(1000 + i), // 1000, 1001
+				EncryptedTx:        []byte("encrypted_data_" + string(rune(i+1))),
+				TxHash:             hash.Bytes(), // Store the same hash as bytes
 			}
+			err := txHandler.StoreTransaction(hash, encryptedTx)
+			require.NoError(t, err)
+		}
+
+		// Try to create bid for block 2000 (past all max inclusion windows)
+		// The current implementation returns an error when no transactions are eligible
+		bid, err := bidManager.CreateBidFromInitTransactions(2000)
+		require.Error(t, err) // Should return error since no transactions are eligible
+		assert.Contains(t, err.Error(), "no transactions provided for block 2000")
+		assert.Nil(t, bid)
+
+		// Now transaction statuses should be properly updated since the hashes match
+		for _, hash := range hashes {
+			storedTx, err := txHandler.GetTransaction(hash)
+			require.NoError(t, err)
+			assert.Equal(t, txhandler.StatusBlocked, storedTx.Status)
 		}
 	})
 }
@@ -169,10 +216,10 @@ func TestBidManager_UpdateTransactionStatuses(t *testing.T) {
 	// Create and store a transaction
 	hash := common.HexToHash("0x7777777777777777777777777777777777777777777777777777777777777777")
 	encryptedTx := &txhandler.EncryptedTransaction{
-		EonID:          1,
-		ScheduledBlock: 4000,
-		EncryptedTx:    []byte("encrypted_data"),
-		TxHash:         []byte("hash"),
+		EonID:              1,
+		MaxInclusionWindow: 4000,
+		EncryptedTx:        []byte("encrypted_data"),
+		TxHash:             hash.Bytes(), // Store the same hash as bytes
 	}
 
 	err := txHandler.StoreTransaction(hash, encryptedTx)

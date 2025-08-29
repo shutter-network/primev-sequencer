@@ -21,14 +21,12 @@ type Config struct {
 	EthereumRPCURL          string
 	KeyperSetManagerAddress string
 	KeyBroadcastAddress     string
-	InclusionWindow         uint64
+	MaxInclusionWindow      uint64
 }
 
 var (
 	config *Config
 )
-
-//TODO: find eon id fix
 
 func Initialize(cfg *Config) {
 	config = cfg
@@ -36,7 +34,7 @@ func Initialize(cfg *Config) {
 		Str("ethereum_rpc", cfg.EthereumRPCURL).
 		Str("keyper_set_manager", cfg.KeyperSetManagerAddress).
 		Str("key_broadcast", cfg.KeyBroadcastAddress).
-		Uint64("inclusion_window", cfg.InclusionWindow).
+		Uint64("max_inclusion_window", cfg.MaxInclusionWindow).
 		Msg("Initialized shutter package configuration")
 }
 
@@ -45,12 +43,12 @@ func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedT
 		return nil, common.Hash{}, fmt.Errorf("shutter package not initialized - call Initialize() first")
 	}
 
-	currentBlockNum, err := getCurrentBlockNumber()
+	currentBlockNum, err := GetCurrentBlockNumber()
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to get current block number: %w", err)
 	}
 
-	scheduledBlock := currentBlockNum + config.InclusionWindow
+	scheduledBlock := currentBlockNum + config.MaxInclusionWindow
 
 	eonID, err := getEonForBlock(scheduledBlock)
 	if err != nil {
@@ -89,17 +87,17 @@ func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedT
 	}
 
 	encryptedTx := &txhandler.EncryptedTransaction{
-		EonID:          eonID,
-		ScheduledBlock: scheduledBlock,
-		EncryptedTx:    encryptedData,
-		TxHash:         txHash.Bytes(),
+		EonID:              eonID,
+		MaxInclusionWindow: scheduledBlock,
+		EncryptedTx:        encryptedData,
+		TxHash:             txHash.Bytes(),
 	}
 
 	log.Info().
 		Str("identity", identityHex).
 		Str("tx_hash", txHash.Hex()).
 		Uint64("current_block", currentBlockNum).
-		Uint64("scheduled_block", scheduledBlock).
+		Uint64("max_inclusion_window", scheduledBlock).
 		Uint64("eon_id", eonID).
 		Msg("Successfully encrypted transaction with Shutter threshold cryptography")
 
@@ -137,7 +135,7 @@ func encryptWithShutter(data []byte, eonID uint64, sigma []byte, eonPublicKey []
 	return encryptedData, nil
 }
 
-func getCurrentBlockNumber() (uint64, error) {
+func GetCurrentBlockNumber() (uint64, error) {
 	if config == nil {
 		return 0, fmt.Errorf("shutter package not initialized - call Initialize() first")
 	}

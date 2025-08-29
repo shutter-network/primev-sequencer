@@ -24,11 +24,14 @@ import (
 	"primev-poc/bidder"
 	primevp2p "primev-poc/p2p"
 	"primev-poc/rpc"
+	"primev-poc/shutter"
 	"primev-poc/txhandler"
 )
 
 var (
-	logLevel string
+	logLevel           string
+	InclusionWindow    = uint64(1)
+	MaxInclusionWindow = uint64(30)
 )
 
 func main() {
@@ -145,7 +148,7 @@ func startSequencer() error {
 		KeyBroadcastAddress:     keyBroadcastAddress,
 	}
 
-	rpcServer, err := rpc.NewRPCServer(config, txHandler)
+	rpcServer, err := rpc.NewRPCServer(config, txHandler, MaxInclusionWindow)
 	if err != nil {
 		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
@@ -205,74 +208,74 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 					Msg("Transaction handler status")
 
 			case <-bidTicker.C:
-				bids, err := bidManager.CreateBidsFromInitTransactions()
+				currentBlock, err := shutter.GetCurrentBlockNumber()
+				if err != nil {
+					zlog.Error().Err(err).Msg("Failed to get current block number")
+					continue
+				}
+				inclusionBlock := currentBlock + InclusionWindow
+				bid, err := bidManager.CreateBidFromInitTransactions(inclusionBlock)
 				if err != nil {
 					zlog.Error().Err(err).Msg("Failed to create bids from init transactions")
 					continue
 				}
 
-				if len(bids) > 0 {
+				if bid != nil {
 					zlog.Info().
-						Int("bid_count", len(bids)).
-						Msg("Created bids from init transactions")
+						Uint64("block_number", uint64(bid.BlockNumber)).
+						Int("tx_count", len(bid.TxHashes)).
+						Str("amount", bid.Amount).
+						Uint64("decay_start", uint64(bid.DecayStartTimestamp)).
+						Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
+						Str("slash_amount", bid.SlashAmount).
+						Msg("Bid created")
 
-					for _, bid := range bids {
-						zlog.Info().
-							Uint64("block_number", uint64(bid.BlockNumber)).
-							Int("tx_count", len(bid.TxHashes)).
-							Str("amount", bid.Amount).
-							Uint64("decay_start", uint64(bid.DecayStartTimestamp)).
-							Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
-							Str("slash_amount", bid.SlashAmount).
-							Msg("Bid created")
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+					commitments, err := bidManager.SubmitBidGRPC(ctx, grpcAddr, bid)
+					cancel()
+					if err != nil {
+						zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
+						continue
+					}
+					zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
 
-						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-						commitments, err := bidManager.SubmitBidGRPC(ctx, grpcAddr, bid)
-						cancel()
+					if len(commitments) == 0 {
+						zlog.Warn().Msg("No commitments received, remarking tx as init")
+						for _, txHashHex := range bid.TxHashes {
+							hash := common.HexToHash(txHashHex)
+							_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
+						}
+						continue
+					}
+
+					for _, c := range commitments {
+						err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
+							InstanceId:           instanceId,
+							TxHashes:             c.GetTxHashes(),
+							BidAmount:            c.GetBidAmount(),
+							BlockNumber:          c.GetBlockNumber(),
+							ReceivedBidDigest:    c.GetReceivedBidDigest(),
+							ReceivedBidSignature: c.GetReceivedBidSignature(),
+							CommitmentDigest:     c.GetCommitmentDigest(),
+							CommitmentSignature:  c.GetCommitmentSignature(),
+							ProviderAddress:      c.GetProviderAddress(),
+							DecayStartTimestamp:  c.GetDecayStartTimestamp(),
+							DecayEndTimestamp:    c.GetDecayEndTimestamp(),
+							DispatchTimestamp:    c.GetDispatchTimestamp(),
+							RevertingTxHashes:    c.GetRevertingTxHashes(),
+							SlashAmount:          c.GetSlashAmount(),
+						})
 						if err != nil {
-							zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
+							zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
 							continue
 						}
-						zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
+						zlog.Info().Msg("Sent commitment")
 
-						if len(commitments) == 0 {
-							zlog.Warn().Msg("No commitments received, remarking tx as init")
-							for _, txHashHex := range bid.TxHashes {
-								hash := common.HexToHash(txHashHex)
-								_ = txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
-							}
-							continue
-						}
-
-						for _, c := range commitments {
-							err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
-								InstanceId:           instanceId,
-								TxHashes:             c.GetTxHashes(),
-								BidAmount:            c.GetBidAmount(),
-								BlockNumber:          c.GetBlockNumber(),
-								ReceivedBidDigest:    c.GetReceivedBidDigest(),
-								ReceivedBidSignature: c.GetReceivedBidSignature(),
-								CommitmentDigest:     c.GetCommitmentDigest(),
-								CommitmentSignature:  c.GetCommitmentSignature(),
-								ProviderAddress:      c.GetProviderAddress(),
-								DecayStartTimestamp:  c.GetDecayStartTimestamp(),
-								DecayEndTimestamp:    c.GetDecayEndTimestamp(),
-								DispatchTimestamp:    c.GetDispatchTimestamp(),
-								RevertingTxHashes:    c.GetRevertingTxHashes(),
-								SlashAmount:          c.GetSlashAmount(),
-							})
-							if err != nil {
-								zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
-								continue
-							}
-							zlog.Info().Msg("Sent commitment")
-
-							zlog.Info().
-								Strs("tx_hashes", c.GetTxHashes()).
-								Str("provider_address", c.GetProviderAddress()).
-								Str("commitment_digest", c.GetCommitmentDigest()).
-								Msg("Commitment received and transactions marked as committed")
-						}
+						zlog.Info().
+							Strs("tx_hashes", c.GetTxHashes()).
+							Str("provider_address", c.GetProviderAddress()).
+							Str("commitment_digest", c.GetCommitmentDigest()).
+							Msg("Commitment received and transactions marked as committed")
 					}
 				}
 			}

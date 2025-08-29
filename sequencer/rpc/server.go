@@ -51,12 +51,12 @@ type RPCError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-func NewRPCServer(config *Config, txHandler *txhandler.TransactionHandler) (*RPCServer, error) {
+func NewRPCServer(config *Config, txHandler *txhandler.TransactionHandler, maxInclusionWindow uint64) (*RPCServer, error) {
 	shutterConfig := &shutter.Config{
 		EthereumRPCURL:          config.UpstreamRPCURL,
 		KeyperSetManagerAddress: config.KeyperSetManagerAddress,
 		KeyBroadcastAddress:     config.KeyBroadcastAddress,
-		InclusionWindow:         10,
+		MaxInclusionWindow:      maxInclusionWindow,
 	}
 
 	// Initialize the shutter package with configuration
@@ -202,8 +202,6 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		return
 	}
 
-	encryptedTx.EncryptedTx = txData
-
 	err = s.txHandler.StoreTransaction(txHash, encryptedTx)
 	if err != nil {
 		log.Error().
@@ -219,7 +217,7 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		Str("method", req.Method).
 		Interface("id", req.ID).
 		Str("tx_hash", txHash.Hex()).
-		Uint64("scheduled_block", encryptedTx.ScheduledBlock).
+		Uint64("max_inclusion_window", encryptedTx.MaxInclusionWindow).
 		Msg("Successfully processed encrypted transaction with identity locally")
 
 	s.writeSuccess(w, req.ID, txHash.Hex())

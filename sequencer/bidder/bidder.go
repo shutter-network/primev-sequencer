@@ -1,6 +1,7 @@
 package bidder
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 	"time"
@@ -18,8 +19,10 @@ import (
 
 //TODO: commitment has a txHash
 
-const BidAmount = "30000000000"
-const DefaultSlashAmount = "0"
+const (
+	BidAmount          = "30000000000"
+	DefaultSlashAmount = "0"
+)
 
 type BidManager struct {
 	txHandler   *txhandler.TransactionHandler
@@ -41,7 +44,7 @@ func NewBidManagerWithSlash(txHandler *txhandler.TransactionHandler, slashAmount
 	}
 }
 
-func (bm *BidManager) CreateBidsFromInitTransactions() ([]*bidderapi.Bid, error) {
+func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidderapi.Bid, error) {
 	initTransactions := bm.txHandler.GetTransactionsByStatus(txhandler.StatusInit)
 
 	if len(initTransactions) == 0 {
@@ -53,51 +56,54 @@ func (bm *BidManager) CreateBidsFromInitTransactions() ([]*bidderapi.Bid, error)
 		Int("transaction_count", len(initTransactions)).
 		Msg("Found transactions with init status, creating bids")
 
-	blockToTransactions := make(map[uint64][]*txhandler.StoredTransaction)
-	blockToHashes := make(map[uint64][]common.Hash)
+	transactionsForBid := make([]*txhandler.StoredTransaction, 0)
+	hashesForBid := make([]common.Hash, 0)
 
-	allTransactions := bm.txHandler.GetAllTransactions()
-
-	for hash, tx := range allTransactions {
-		if tx.Status == txhandler.StatusInit {
-			blockNum := tx.EncryptedTx.ScheduledBlock
-			blockToTransactions[blockNum] = append(blockToTransactions[blockNum], tx)
-			blockToHashes[blockNum] = append(blockToHashes[blockNum], hash)
+	blockedTransaction := make([]common.Hash, 0)
+	for _, tx := range initTransactions {
+		if tx.EncryptedTx.MaxInclusionWindow >= blockNumber {
+			transactionsForBid = append(transactionsForBid, tx)
+			hashesForBid = append(hashesForBid, common.BytesToHash(tx.EncryptedTx.TxHash))
+		} else {
+			blockedTransaction = append(blockedTransaction, common.BytesToHash(tx.EncryptedTx.TxHash))
+			log.Warn().
+				Uint64("max_inclusion_window", tx.EncryptedTx.MaxInclusionWindow).
+				Uint64("block_number", blockNumber).
+				Msg("Transaction max inclusion window has passed the current block number")
 		}
 	}
 
-	var bids []*bidderapi.Bid
+	err := bm.updateTransactionStatuses(blockedTransaction, txhandler.StatusBlocked)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Msg("Failed to update transaction statuses for blocked transactions")
+	}
 
-	for blockNumber, transactions := range blockToTransactions {
-		hashes := blockToHashes[blockNumber]
-
-		bid, err := bm.createBidForBlock(blockNumber, transactions, hashes)
-		if err != nil {
-			log.Error().
-				Err(err).
-				Uint64("block_number", blockNumber).
-				Msg("Failed to create bid for block")
-			continue
-		}
-
-		bids = append(bids, bid)
-
-		err = bm.updateTransactionStatuses(hashes, txhandler.StatusBidSubmitted)
-		if err != nil {
-			log.Error().
-				Err(err).
-				Uint64("block_number", blockNumber).
-				Msg("Failed to update transaction statuses after bid creation")
-		}
-
-		log.Info().
+	bid, err := bm.createBidForBlock(blockNumber, transactionsForBid, hashesForBid)
+	if err != nil {
+		log.Error().
+			Err(err).
 			Uint64("block_number", blockNumber).
-			Int("tx_count", len(transactions)).
-			Str("bid_amount", bid.Amount).
-			Msg("Created bid for scheduled block and updated transaction statuses")
+			Msg("Failed to create bid for block")
+		return nil, err
 	}
 
-	return bids, nil
+	err = bm.updateTransactionStatuses(hashesForBid, txhandler.StatusBidSubmitted)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Uint64("block_number", blockNumber).
+			Msg("Failed to update transaction statuses after bid creation")
+	}
+
+	log.Info().
+		Uint64("block_number", blockNumber).
+		Int("tx_count", len(transactionsForBid)).
+		Str("bid_amount", bid.Amount).
+		Msg("Created bid for scheduled block and updated transaction statuses")
+
+	return bid, nil
 }
 
 func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txhandler.StoredTransaction, hashes []common.Hash) (*bidderapi.Bid, error) {
@@ -112,9 +118,9 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 	var txHashes []string
 	var rawTransactions []string
 
-	for _, hash := range hashes {
-		txHashes = append(txHashes, hash.Hex())
-		// rawTransactions = append(rawTransactions, hex.EncodeToString(transactions[i].EncryptedTx.EncryptedTx))
+	for _, transaction := range transactions {
+		// txHashes = append(txHashes, hash.Hex())
+		rawTransactions = append(rawTransactions, hex.EncodeToString(transaction.EncryptedTx.EncryptedTx))
 	}
 
 	currentTime := time.Now().UnixMilli()
