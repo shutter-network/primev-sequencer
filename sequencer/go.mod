@@ -17,6 +17,8 @@ require (
 	google.golang.org/grpc v1.67.1
 )
 
+replace github.com/shutter-network/rolling-shutter/rolling-shutter => github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20250902093532-f16acd2fbf8c
+
 replace github.com/primev/mev-commit/p2p => github.com/blockchainluffy/mev-commit/p2p v0.0.0-20250901134253-f50dd05abf39
 
 require (

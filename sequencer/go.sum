@@ -585,8 +585,8 @@ github.com/shurcooL/users v0.0.0-20180125191416-49c67e49c537/go.mod h1:QJTqeLYED
 github.com/shurcooL/webdavfs v0.0.0-20170829043945-18c3829fa133/go.mod h1:hKmq5kWdCj2z2KEozexVbfEZIWiTjhE0+UjmZgPqehw=
 github.com/shutter-network/contracts/v2 v2.0.0-beta.2.0.20250108084129-3b743179373a h1:hWw2nJLGPZU7Rvd6YmEEDfvlTUbwZKZl5UP2ThVVNSU=
 github.com/shutter-network/contracts/v2 v2.0.0-beta.2.0.20250108084129-3b743179373a/go.mod h1:V8KhVM75wyWVSzZJ6GeC9dWCjRrinIQVb7mYNP+knbg=
-github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20250729085242-42865d9ac30d h1:OCY3ISy0ZEKvqUOCYVw4d3Ha/7oQl/Cpz2DxhNYXsZk=
-github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20250729085242-42865d9ac30d/go.mod h1:FJIFtnDPrYZ9weYydPhaAFEHFuWQxp8QLhkiXZ5feEk=
+github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20250902093532-f16acd2fbf8c h1:dda1E3UblOx6E9V9ZGaYLCQ7Q0Zui/neYiOGnpbdgdg=
+github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20250902093532-f16acd2fbf8c/go.mod h1:FJIFtnDPrYZ9weYydPhaAFEHFuWQxp8QLhkiXZ5feEk=
 github.com/shutter-network/shutter/shlib v0.1.19 h1:Fm/PnxAapl5UK4JuJyF2wBh3dYB5ESztnNFcbmzNNOI=
 github.com/shutter-network/shutter/shlib v0.1.19/go.mod h1:miY10OJ0FKjLZTwvmG0AJNijsjsNDAk6l1tROTj8uzU=
 github.com/sirupsen/logrus v1.7.0/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=

@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/address"
@@ -262,6 +261,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 							DispatchTimestamp:    c.GetDispatchTimestamp(),
 							RevertingTxHashes:    c.GetRevertingTxHashes(),
 							SlashAmount:          c.GetSlashAmount(),
+							Identities:           c.GetIdentity(),
 						})
 						if err != nil {
 							zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
