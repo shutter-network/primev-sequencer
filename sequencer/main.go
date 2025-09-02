@@ -214,7 +214,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 					continue
 				}
 				inclusionBlock := currentBlock + InclusionWindow
-				bid, err := bidManager.CreateBidFromInitTransactions(inclusionBlock)
+				bid, txHashes, err := bidManager.CreateBidFromInitTransactions(inclusionBlock)
 				if err != nil {
 					zlog.Error().Err(err).Msg("Failed to create bids from init transactions")
 					continue

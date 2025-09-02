@@ -115,10 +115,12 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 
 	txHashes := make([]string, 0)
 	rawTransactions := make([]string, 0)
+	identities := make([]string, 0)
 
 	for _, transaction := range transactions {
 		// txHashes = append(txHashes, hash.Hex())
 		rawTransactions = append(rawTransactions, hex.EncodeToString(transaction.EncryptedTx.EncryptedTx))
+		identities = append(identities, transaction.EncryptedTx.Identity[2:]) // Remove "0x" from the identity
 	}
 
 	currentTime := time.Now().UnixMilli()
@@ -135,7 +137,9 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 
 		RawTransactions: rawTransactions,
 
-		SlashAmount: bm.slashAmount,
+		SlashAmount:   bm.slashAmount,
+		Identity:      identities,
+		IsShutterised: true,
 	}
 
 	return bid, nil

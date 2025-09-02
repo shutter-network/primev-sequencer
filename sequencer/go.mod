@@ -17,6 +17,8 @@ require (
 	google.golang.org/grpc v1.67.1
 )
 
+replace github.com/primev/mev-commit/p2p => github.com/blockchainluffy/mev-commit/p2p v0.0.0-20250901134253-f50dd05abf39
+
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.32.0-20240221180331-f05a6f4403ce.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect

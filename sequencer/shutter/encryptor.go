@@ -91,6 +91,7 @@ func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedT
 		MaxInclusionWindow: scheduledBlock,
 		EncryptedTx:        encryptedData,
 		TxHash:             txHash.Bytes(),
+		Identity:           identityHex,
 	}
 
 	log.Info().
