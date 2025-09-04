@@ -261,7 +261,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 							DispatchTimestamp:    c.GetDispatchTimestamp(),
 							RevertingTxHashes:    c.GetRevertingTxHashes(),
 							SlashAmount:          c.GetSlashAmount(),
-							Identities:           c.GetIdentity(),
+							Identities:           c.GetTxHashes(),
 						})
 						if err != nil {
 							zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
