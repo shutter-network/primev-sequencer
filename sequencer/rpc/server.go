@@ -23,6 +23,7 @@ type Config struct {
 	UpstreamRPCURL          string
 	KeyperSetManagerAddress string
 	KeyBroadcastAddress     string
+	BidderNodeAddress       string
 }
 
 type RPCServer struct {
@@ -191,7 +192,7 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		return
 	}
 
-	encryptedTx, _, err := shutter.EncryptTransaction(rawTx, txHash)
+	encryptedTx, _, err := shutter.EncryptTransaction(rawTx, txHash, s.config.BidderNodeAddress)
 	if err != nil {
 		log.Error().
 			Err(err).

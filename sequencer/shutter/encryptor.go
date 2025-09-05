@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/contracts/v2/bindings/keybroadcastcontract"
@@ -38,7 +39,7 @@ func Initialize(cfg *Config) {
 		Msg("Initialized shutter package configuration")
 }
 
-func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedTransaction, common.Hash, error) {
+func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress string) (*txhandler.EncryptedTransaction, common.Hash, error) {
 	if config == nil {
 		return nil, common.Hash{}, fmt.Errorf("shutter package not initialized - call Initialize() first")
 	}
@@ -64,15 +65,8 @@ func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedT
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to decode raw transaction: %w", err)
 	}
-	identityHex := hex.EncodeToString(txHash.Bytes())
 
-	log.Debug().
-		Str("identity", identityHex).
-		Str("tx_hash", txHash.Hex()).
-		Uint64("current_block", currentBlockNum).
-		Uint64("expected_scheduled_block", scheduledBlock).
-		Uint64("eon_id", eonID).
-		Msg("Encrypting transaction")
+	identity := getIdentity(txHash, bidderNodeAddress)
 
 	sigmaBlock, err := shcrypto.RandomSigma(rand.Reader)
 	if err != nil {
@@ -81,7 +75,7 @@ func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedT
 
 	sigma := sigmaBlock[:]
 
-	encryptedData, err := encryptWithShutter(txData, eonID, sigma, eonPublicKey, txHash.Bytes())
+	encryptedData, err := encryptWithShutter(txData, eonID, sigma, eonPublicKey, identity)
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to encrypt transaction: %w", err)
 	}
@@ -91,14 +85,14 @@ func EncryptTransaction(rawTx string, txHash common.Hash) (*txhandler.EncryptedT
 		MaxInclusionWindow: scheduledBlock,
 		EncryptedTx:        encryptedData,
 		TxHash:             txHash.Bytes(),
-		Identity:           identityHex,
+		IdentityPrefix:     txHash.Hex(), // currently tx hash is the identity prefix
 	}
 
 	log.Info().
-		Str("identity", identityHex).
+		Str("identity", hex.EncodeToString(identity)).
 		Str("tx_hash", txHash.Hex()).
 		Uint64("current_block", currentBlockNum).
-		Uint64("max_inclusion_window", scheduledBlock).
+		Uint64("expected_scheduled_block", scheduledBlock).
 		Uint64("eon_id", eonID).
 		Msg("Successfully encrypted transaction with Shutter threshold cryptography")
 
@@ -212,4 +206,10 @@ func fetchEonKeyForEon(eonID uint64) ([]byte, error) {
 		Msg("Retrieved eon key")
 
 	return eonKey, nil
+}
+
+func getIdentity(txHash common.Hash, bidderNodeAddress string) []byte {
+	bidderNodeAddressHex := common.HexToAddress(bidderNodeAddress)
+	imageBytes := append(txHash.Bytes(), bidderNodeAddressHex.Bytes()...)
+	return crypto.Keccak256(imageBytes)
 }

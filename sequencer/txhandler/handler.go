@@ -26,7 +26,7 @@ type EncryptedTransaction struct {
 	MaxInclusionWindow uint64
 	EncryptedTx        []byte
 	TxHash             []byte
-	Identity           string
+	IdentityPrefix     string
 }
 
 type StoredTransaction struct {

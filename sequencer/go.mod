@@ -19,7 +19,7 @@ require (
 
 replace github.com/shutter-network/rolling-shutter/rolling-shutter => github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20250902093532-f16acd2fbf8c
 
-replace github.com/primev/mev-commit/p2p => github.com/blockchainluffy/mev-commit/p2p v0.0.0-20250904082220-5fe5f5befc80
+replace github.com/primev/mev-commit/p2p => github.com/blockchainluffy/mev-commit/p2p v0.0.0-20250904112833-d79f19e75408
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.32.0-20240221180331-f05a6f4403ce.1 // indirect

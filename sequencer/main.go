@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	bidderapiv1 "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/address"
@@ -67,7 +68,7 @@ func startSequencer() error {
 	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
 	grpcAddr := os.Getenv("GRPC_ADDR")
 	instanceId := os.Getenv("INSTANCE_ID")
-
+	bidderNodeAddress := os.Getenv("BIDDER_NODE_ADDRESS")
 	// Validate required environment variables
 	if keyperSetManagerAddress == "" {
 		return fmt.Errorf("KEYPER_SET_MANAGER_ADDRESS environment variable is required")
@@ -145,6 +146,7 @@ func startSequencer() error {
 		UpstreamRPCURL:          upstreamRPCURL,
 		KeyperSetManagerAddress: keyperSetManagerAddress,
 		KeyBroadcastAddress:     keyBroadcastAddress,
+		BidderNodeAddress:       bidderNodeAddress,
 	}
 
 	rpcServer, err := rpc.NewRPCServer(config, txHandler, MaxInclusionWindow)
@@ -246,6 +248,12 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 					zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
 
 					for _, c := range commitments {
+						identityPrefixes, err := getIdentityPrefixes(c.BidOptions)
+						if err != nil {
+							zlog.Error().Err(err).Msg("Failed to get identities")
+							continue
+						}
+						ctx, _ := context.WithTimeout(context.Background(), 2*time.Minute)
 						err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
 							InstanceId:           instanceId,
 							TxHashes:             c.GetTxHashes(),
@@ -261,7 +269,7 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 							DispatchTimestamp:    c.GetDispatchTimestamp(),
 							RevertingTxHashes:    c.GetRevertingTxHashes(),
 							SlashAmount:          c.GetSlashAmount(),
-							Identities:           c.GetTxHashes(),
+							Identities:           identityPrefixes,
 						})
 						if err != nil {
 							zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
@@ -297,4 +305,17 @@ func setupLogging() {
 	}
 	zerolog.SetGlobalLevel(level)
 	zlog.Logger = zlog.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+}
+
+func getIdentityPrefixes(bidOptions *bidderapiv1.BidOptions) ([]string, error) {
+	identities := make([]string, 0)
+	for _, option := range bidOptions.Options {
+		switch option.GetOpt().(type) {
+		case *bidderapiv1.BidOption_ShutterisedBidOption:
+			identities = append(identities, option.GetShutterisedBidOption().IdentityPrefix)
+		default:
+			return nil, fmt.Errorf("invalid bid option")
+		}
+	}
+	return identities, nil
 }

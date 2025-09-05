@@ -115,10 +115,18 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 
 	txHashes := make([]string, 0)
 	rawTransactions := make([]string, 0)
+	bidOptions := make([]*bidderapi.BidOption, 0)
 
 	for _, transaction := range transactions {
-		txHashes = append(txHashes, common.Bytes2Hex(transaction.EncryptedTx.TxHash))
+		// txHashes = append(txHashes, common.Bytes2Hex(transaction.EncryptedTx.TxHash))
 		rawTransactions = append(rawTransactions, hex.EncodeToString(transaction.EncryptedTx.EncryptedTx))
+		bidOptions = append(bidOptions, &bidderapi.BidOption{
+			Opt: &bidderapi.BidOption_ShutterisedBidOption{
+				ShutterisedBidOption: &bidderapi.ShutterisedBidOption{
+					IdentityPrefix: transaction.EncryptedTx.IdentityPrefix,
+				},
+			},
+		})
 	}
 
 	currentTime := time.Now().UnixMilli()
@@ -137,15 +145,7 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 
 		SlashAmount: bm.slashAmount,
 		BidOptions: &bidderapi.BidOptions{
-			Options: []*bidderapi.BidOption{
-				{
-					Opt: &bidderapi.BidOption_PositionConstraint{
-						PositionConstraint: &bidderapi.PositionConstraint{
-							Anchor: bidderapi.PositionConstraint_ANCHOR_SHUTTERISED,
-						},
-					},
-				},
-			},
+			Options: bidOptions,
 		},
 	}
 
