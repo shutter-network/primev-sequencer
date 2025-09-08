@@ -17,6 +17,7 @@ const (
 	StatusInit         TransactionStatus = "init"
 	StatusBidSubmitted TransactionStatus = "bidsubmitted"
 	StatusCommitted    TransactionStatus = "committed"
+	StatusDecrypted    TransactionStatus = "decrypted"
 	StatusFinalised    TransactionStatus = "finalised"
 	StatusBlocked      TransactionStatus = "blocked"
 )
@@ -26,7 +27,8 @@ type EncryptedTransaction struct {
 	MaxInclusionWindow uint64
 	EncryptedTx        []byte
 	TxHash             []byte
-	IdentityPrefix     string
+	Identity           string
+	DecryptionKey      string
 }
 
 type StoredTransaction struct {
@@ -159,6 +161,34 @@ func (th *TransactionHandler) GetStatusCounts() map[TransactionStatus]int {
 	}
 
 	return counts
+}
+
+// GetTransactionsByIdentity returns all transactions that match the given identity
+func (th *TransactionHandler) GetTransactionsByIdentity(identity string) *StoredTransaction {
+	th.mutex.RLock()
+	defer th.mutex.RUnlock()
+
+	for _, transaction := range th.transactions {
+		if transaction.EncryptedTx.Identity == identity {
+			return transaction
+		}
+	}
+
+	return nil
+}
+
+// GetTransactionsByIdentityAndStatus returns all transactions that match both identity and status
+func (th *TransactionHandler) GetTransactionsByIdentityAndStatus(identity string, status TransactionStatus) *StoredTransaction {
+	th.mutex.RLock()
+	defer th.mutex.RUnlock()
+
+	for _, transaction := range th.transactions {
+		if transaction.EncryptedTx.Identity == identity && transaction.Status == status {
+			return transaction
+		}
+	}
+
+	return nil
 }
 
 func getCurrentTimestamp() int64 {

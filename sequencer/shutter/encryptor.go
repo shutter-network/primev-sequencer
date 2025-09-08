@@ -8,7 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/contracts/v2/bindings/keybroadcastcontract"
@@ -16,6 +15,7 @@ import (
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 
 	"primev-poc/txhandler"
+	"primev-poc/utils"
 )
 
 type Config struct {
@@ -66,7 +66,7 @@ func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress stri
 		return nil, common.Hash{}, fmt.Errorf("failed to decode raw transaction: %w", err)
 	}
 
-	identity := getIdentity(txHash, bidderNodeAddress)
+	identity := utils.GetIdentityPrefix(txHash, bidderNodeAddress)
 
 	sigmaBlock, err := shcrypto.RandomSigma(rand.Reader)
 	if err != nil {
@@ -85,7 +85,7 @@ func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress stri
 		MaxInclusionWindow: scheduledBlock,
 		EncryptedTx:        encryptedData,
 		TxHash:             txHash.Bytes(),
-		IdentityPrefix:     txHash.Hex(), // currently tx hash is the identity prefix
+		Identity:           hex.EncodeToString(identity),
 	}
 
 	log.Info().
@@ -206,10 +206,4 @@ func fetchEonKeyForEon(eonID uint64) ([]byte, error) {
 		Msg("Retrieved eon key")
 
 	return eonKey, nil
-}
-
-func getIdentity(txHash common.Hash, bidderNodeAddress string) []byte {
-	bidderNodeAddressHex := common.HexToAddress(bidderNodeAddress)
-	imageBytes := append(txHash.Bytes(), bidderNodeAddressHex.Bytes()...)
-	return crypto.Keccak256(imageBytes)
 }

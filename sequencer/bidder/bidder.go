@@ -123,7 +123,7 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 		bidOptions = append(bidOptions, &bidderapi.BidOption{
 			Opt: &bidderapi.BidOption_ShutterisedBidOption{
 				ShutterisedBidOption: &bidderapi.ShutterisedBidOption{
-					IdentityPrefix: transaction.EncryptedTx.IdentityPrefix,
+					IdentityPrefix: hex.EncodeToString(transaction.EncryptedTx.TxHash),
 				},
 			},
 		})
