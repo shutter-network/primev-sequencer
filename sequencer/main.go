@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2pmsg"
 	"github.com/spf13/cobra"
 
+	"primev-poc/api"
 	"primev-poc/bidder"
 	primevp2p "primev-poc/p2p"
 	"primev-poc/rpc"
@@ -63,6 +65,7 @@ func Cmd() *cobra.Command {
 func startSequencer() error {
 	// Get config values from environment variables
 	rpcPort := getEnvOrDefault("RPC_PORT", "8545")
+	apiPort := getEnvOrDefault("API_PORT", "8080")
 	upstreamRPCURL := getEnvOrDefault("UPSTREAM_RPC_URL", "http://localhost:8546")
 	keyperSetManagerAddress := os.Getenv("KEYPER_SET_MANAGER_ADDRESS")
 	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
@@ -89,6 +92,7 @@ func startSequencer() error {
 
 	zlog.Info().
 		Str("rpc-port", rpcPort).
+		Str("api-port", apiPort).
 		Str("upstream-rpc", upstreamRPCURL).
 		Str("grpc-addr", grpcAddr).
 		Msg("Starting PrimeV sequencer with integrated modules")
@@ -139,7 +143,23 @@ func startSequencer() error {
 
 	txHandler := startTransactionHandler()
 
-	p2p := primevp2p.NewP2P(&p2pConfig)
+	// Start REST API server
+	restAPI := api.NewRestAPI(txHandler)
+	apiMux := restAPI.SetupRoutes()
+	apiServer := &http.Server{
+		Addr:    ":" + apiPort,
+		Handler: apiMux,
+	}
+
+	// Start API server in a goroutine
+	go func() {
+		zlog.Info().Str("port", apiPort).Msg("Starting REST API server")
+		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			zlog.Error().Err(err).Msg("REST API server error")
+		}
+	}()
+
+	p2p := primevp2p.NewP2P(&p2pConfig, txHandler, bidderNodeAddress)
 
 	config := &rpc.Config{
 		Port:                    rpcPort,
@@ -170,6 +190,15 @@ func startSequencer() error {
 	cancel()
 
 	zlog.Info().Msg("Shutting down all modules...")
+
+	// Gracefully shutdown API server
+	apiCtx, apiCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer apiCancel()
+	if err := apiServer.Shutdown(apiCtx); err != nil {
+		zlog.Error().Err(err).Msg("API server shutdown error")
+	} else {
+		zlog.Info().Msg("API server stopped")
+	}
 
 	zlog.Info().Msg("All modules stopped")
 	return nil
