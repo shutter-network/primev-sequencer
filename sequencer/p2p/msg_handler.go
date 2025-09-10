@@ -63,7 +63,7 @@ func (mh *DecryptionKeysMsgHandler) HandleMessage(ctx context.Context, msg p2pms
 		if tx == nil {
 			continue
 		}
-		tx.EncryptedTx.DecryptionKey = hex.EncodeToString(key.Key)
+		tx.EncryptedTx.DecryptionKey = key.Key
 		err := mh.txHandler.UpdateTransactionStatus(common.BytesToHash(tx.EncryptedTx.TxHash), txhandler.StatusDecrypted)
 		if err != nil {
 			log.Error().
@@ -74,7 +74,7 @@ func (mh *DecryptionKeysMsgHandler) HandleMessage(ctx context.Context, msg p2pms
 		}
 		log.Info().
 			Str("tx_hash", hex.EncodeToString(tx.EncryptedTx.TxHash)).
-			Str("decryption_key", tx.EncryptedTx.DecryptionKey).
+			Str("decryption_key", hex.EncodeToString(tx.EncryptedTx.DecryptionKey)).
 			Msg("Decryption key received")
 	}
 

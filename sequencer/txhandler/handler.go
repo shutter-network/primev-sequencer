@@ -28,7 +28,7 @@ type EncryptedTransaction struct {
 	EncryptedTx        []byte
 	TxHash             []byte
 	Identity           string
-	DecryptionKey      string
+	DecryptionKey      []byte
 }
 
 type StoredTransaction struct {
