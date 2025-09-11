@@ -234,7 +234,13 @@ func (bm *BidManager) SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *b
 			// Update all tx_hashes in txHandler to StatusCommitted
 			for _, txHashHex := range commitment.GetTxHashes() {
 				hash := common.HexToHash(txHashHex)
-				_ = bm.txHandler.UpdateTransactionStatus(hash, txhandler.StatusCommitted)
+				err := bm.txHandler.UpdateCommittedTransaction(hash, uint64(commitment.GetBlockNumber()))
+				if err != nil {
+					log.Error().
+						Err(err).
+						Str("tx_hash", hash.Hex()).
+						Msg("Failed to update transaction status and commited block")
+				}
 			}
 		}
 	}

@@ -35,6 +35,8 @@ type StoredTransaction struct {
 	EncryptedTx    *EncryptedTransaction
 	Status         TransactionStatus
 	SubmissionTime int64
+	CommitedBlock  uint64
+	Retries        int
 }
 
 type TransactionHandler struct {
@@ -61,6 +63,8 @@ func (th *TransactionHandler) StoreTransaction(hash common.Hash, encryptedTx *En
 		EncryptedTx:    encryptedTx,
 		Status:         StatusInit,
 		SubmissionTime: getCurrentTimestamp(),
+		CommitedBlock:  0,
+		Retries:        0,
 	}
 
 	th.transactions[hash] = transaction
@@ -96,6 +100,36 @@ func (th *TransactionHandler) UpdateTransactionStatus(hash common.Hash, status T
 	return nil
 }
 
+func (th *TransactionHandler) UpdateCommittedTransaction(hash common.Hash, commitedBlock uint64) error {
+	th.mutex.Lock()
+	defer th.mutex.Unlock()
+
+	transaction, exists := th.transactions[hash]
+	if !exists {
+		return fmt.Errorf("transaction %s not found", hash.Hex())
+	}
+
+	if transaction.EncryptedTx.DecryptionKey != nil {
+		transaction.Status = StatusDecrypted
+	} else {
+		transaction.Status = StatusCommitted
+	}
+	transaction.CommitedBlock = commitedBlock
+	return nil
+}
+
+func (th *TransactionHandler) IncrementTransactionRetries(hash common.Hash) error {
+	th.mutex.Lock()
+	defer th.mutex.Unlock()
+
+	transaction, exists := th.transactions[hash]
+	if !exists {
+		return fmt.Errorf("transaction %s not found", hash.Hex())
+	}
+	transaction.Retries++
+	return nil
+}
+
 func (th *TransactionHandler) GetTransaction(hash common.Hash) (*StoredTransaction, error) {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
@@ -115,13 +149,7 @@ func (th *TransactionHandler) GetTransactionsByStatus(status TransactionStatus) 
 	var result []*StoredTransaction
 	for _, transaction := range th.transactions {
 		if transaction.Status == status {
-			encryptedTxCopy := transaction.EncryptedTx
-
-			result = append(result, &StoredTransaction{
-				EncryptedTx:    encryptedTxCopy,
-				Status:         transaction.Status,
-				SubmissionTime: transaction.SubmissionTime,
-			})
+			result = append(result, transaction)
 		}
 	}
 
@@ -189,6 +217,20 @@ func (th *TransactionHandler) GetTransactionsByIdentityAndStatus(identity string
 	}
 
 	return nil
+}
+
+func (th *TransactionHandler) GetTransactionsByCommitedBlock(commitedBlock uint64) []*StoredTransaction {
+	th.mutex.RLock()
+	defer th.mutex.RUnlock()
+
+	var result []*StoredTransaction
+	for _, transaction := range th.transactions {
+		if transaction.CommitedBlock != 0 && transaction.CommitedBlock <= commitedBlock && transaction.Status == StatusDecrypted {
+			result = append(result, transaction)
+		}
+	}
+
+	return result
 }
 
 func getCurrentTimestamp() int64 {

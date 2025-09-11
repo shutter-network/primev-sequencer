@@ -27,6 +27,7 @@ import (
 	primevp2p "primev-poc/p2p"
 	"primev-poc/rpc"
 	"primev-poc/shutter"
+	"primev-poc/transaction_verifier"
 	"primev-poc/txhandler"
 )
 
@@ -143,6 +144,13 @@ func startSequencer() error {
 
 	txHandler := startTransactionHandler()
 
+	// Start Transaction Verifier
+	verifier, err := startTransactionVerifier(upstreamRPCURL, txHandler)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction verifier: %w", err)
+	}
+	defer verifier.Stop()
+
 	// Start REST API server
 	restAPI := api.NewRestAPI(txHandler)
 	apiMux := restAPI.SetupRoutes()
@@ -211,6 +219,31 @@ func startTransactionHandler() *txhandler.TransactionHandler {
 
 	zlog.Info().Msg("Transaction handler module started successfully")
 	return txHandler
+}
+
+func startTransactionVerifier(rpcURL string, txHandler *txhandler.TransactionHandler) (*transaction_verifier.TransactionVerifier, error) {
+	zlog.Info().Msg("Starting transaction verifier module")
+
+	// Get verification interval from environment variable, default to 30 seconds
+	verificationInterval := getEnvOrDefault("VERIFICATION_INTERVAL", "10s")
+	interval, err := time.ParseDuration(verificationInterval)
+	if err != nil {
+		zlog.Warn().Str("interval", verificationInterval).Msg("Invalid verification interval, using default 30s")
+		interval = 30 * time.Second
+	}
+
+	verifier, err := transaction_verifier.NewTransactionVerifier(rpcURL, txHandler, interval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transaction verifier: %w", err)
+	}
+
+	verifier.Start()
+	zlog.Info().
+		Str("rpc_url", rpcURL).
+		Dur("interval", interval).
+		Msg("Transaction verifier module started successfully")
+
+	return verifier, nil
 }
 
 func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2p.P2P, grpcAddr string, instanceId uint64) error {
