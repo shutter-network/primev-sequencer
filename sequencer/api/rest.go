@@ -77,7 +77,7 @@ func (api *RestAPI) GetDecryptedTx(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if transaction is decrypted
-	if transaction.Status != txhandler.StatusDecrypted {
+	if len(transaction.EncryptedTx.DecryptionKey) == 0 {
 		log.Error().Str("tx_hash", txHashStr).Msg("Transaction is not decrypted")
 		api.sendErrorResponse(w, "Transaction is not decrypted", http.StatusBadRequest)
 		return
