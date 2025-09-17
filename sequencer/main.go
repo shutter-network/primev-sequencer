@@ -98,7 +98,6 @@ func runSequencer() error {
 	}
 	defer verifier.Stop()
 
-	// Start REST API server
 	restAPI := api.NewRestAPI(txHandler)
 	apiMux := restAPI.SetupRoutes()
 	apiServer := &http.Server{
@@ -332,7 +331,15 @@ func getIdentityPrefixes(bidOptions *bidderapiv1.BidOptions) ([]string, error) {
 func readFromEnv() (*SequencerConfig, error) {
 	// Get config values from environment variables
 	rpcPort := getEnvOrDefault("RPC_PORT", "8545")
+	_, err := strconv.ParseInt(rpcPort, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse RPC_PORT: %w", err)
+	}
 	apiPort := getEnvOrDefault("API_PORT", "8080")
+	_, err = strconv.ParseInt(apiPort, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse API_PORT: %w", err)
+	}
 	upstreamRPCURL := getEnvOrDefault("UPSTREAM_RPC_URL", "http://localhost:8546")
 	keyperSetManagerAddress := os.Getenv("KEYPER_SET_MANAGER_ADDRESS")
 	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
@@ -381,6 +388,10 @@ func readFromEnv() (*SequencerConfig, error) {
 	p2pConfig.CustomBootstrapAddresses = bootstrapP2PAddresses
 
 	p2pPort := getEnvOrDefault("P2P_PORT", "23003")
+	_, err = strconv.ParseInt(p2pPort, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse P2P_PORT: %w", err)
+	}
 
 	p2pConfig.ListenAddresses = []*address.P2PAddress{
 		address.MustP2PAddress("/ip4/0.0.0.0/tcp/" + p2pPort),
