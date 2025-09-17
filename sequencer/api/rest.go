@@ -84,7 +84,19 @@ func (api *RestAPI) GetDecryptedTx(w http.ResponseWriter, r *http.Request) {
 	// Check if transaction is decrypted
 	if len(transaction.EncryptedTx.DecryptionKey) == 0 {
 		log.Error().Str("tx_hash", txHashStr).Msg("Transaction is not decrypted")
-		api.sendErrorResponse(w, "Transaction is not decrypted", http.StatusBadRequest)
+		responseData := &DecryptedTransactionData{
+			TxHash:        txHash.Hex(),
+			Identity:      transaction.EncryptedTx.Identity,
+			DecryptionKey: "",
+			DecryptedTx:   "",
+		}
+
+		response := GetDecryptedTxResponse{
+			Success: false,
+			Data:    responseData,
+		}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
@@ -92,21 +104,56 @@ func (api *RestAPI) GetDecryptedTx(w http.ResponseWriter, r *http.Request) {
 	err = decryptionKey.Unmarshal(transaction.EncryptedTx.DecryptionKey)
 	if err != nil {
 		log.Error().Err(err).Str("tx_hash", txHashStr).Msg("Failed to unmarshal decryption key")
-		api.sendErrorResponse(w, "Failed to unmarshal decryption key", http.StatusInternalServerError)
+		responseData := &DecryptedTransactionData{
+			TxHash:        txHash.Hex(),
+			Identity:      transaction.EncryptedTx.Identity,
+			DecryptionKey: "",
+			DecryptedTx:   "",
+		}
+
+		response := GetDecryptedTxResponse{
+			Success: false,
+			Data:    responseData,
+		}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
+
 	encryptedMsg := new(shcrypto.EncryptedMessage)
 	err = encryptedMsg.Unmarshal(transaction.EncryptedTx.EncryptedTx)
 	if err != nil {
 		log.Error().Err(err).Str("tx_hash", txHashStr).Msg("Failed to unmarshal encrypted message")
-		api.sendErrorResponse(w, "Failed to unmarshal encrypted message", http.StatusInternalServerError)
+		responseData := &DecryptedTransactionData{
+			TxHash:        txHash.Hex(),
+			Identity:      transaction.EncryptedTx.Identity,
+			DecryptionKey: "",
+			DecryptedTx:   "",
+		}
+		response := GetDecryptedTxResponse{
+			Success: false,
+			Data:    responseData,
+		}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
 	decryptedMsg, err := encryptedMsg.Decrypt(decryptionKey)
 	if err != nil {
 		log.Error().Err(err).Str("tx_hash", txHashStr).Msg("Failed to decrypt transaction")
-		api.sendErrorResponse(w, "Failed to decrypt transaction", http.StatusInternalServerError)
+		responseData := &DecryptedTransactionData{
+			TxHash:        txHash.Hex(),
+			Identity:      transaction.EncryptedTx.Identity,
+			DecryptionKey: "",
+			DecryptedTx:   "",
+		}
+		response := GetDecryptedTxResponse{
+			Success: false,
+			Data:    responseData,
+		}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
