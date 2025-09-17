@@ -25,7 +25,6 @@ import (
 	"primev-poc/bidder"
 	primevp2p "primev-poc/p2p"
 	"primev-poc/rpc"
-	"primev-poc/shutter"
 	"primev-poc/transaction_verifier"
 	"primev-poc/txstore"
 )
@@ -176,7 +175,7 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 					Msg("Transaction handler status")
 
 			case <-bidTicker.C:
-				currentBlock, err := shutter.GetCurrentBlockNumber()
+				currentBlock, err := s.rpcServer.Encryptor.GetCurrentBlockNumber()
 				if err != nil {
 					zlog.Error().Err(err).Msg("Failed to get current block number")
 					continue

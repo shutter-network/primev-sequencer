@@ -30,6 +30,7 @@ type RPCServer struct {
 	config     *Config
 	txStore    *txstore.TransactionStore
 	httpClient *http.Client
+	Encryptor  *shutter.Encryptor
 }
 
 type JSONRPCRequest struct {
@@ -53,20 +54,14 @@ type RPCError struct {
 }
 
 func NewRPCServer(config *Config, txStore *txstore.TransactionStore, maxInclusionWindow uint64) (*RPCServer, error) {
-	shutterConfig := &shutter.Config{
-		EthereumRPCURL:          config.UpstreamRPCURL,
-		KeyperSetManagerAddress: config.KeyperSetManagerAddress,
-		KeyBroadcastAddress:     config.KeyBroadcastAddress,
-		MaxInclusionWindow:      maxInclusionWindow,
-	}
-
 	// Initialize the shutter package with configuration
-	shutter.Initialize(shutterConfig)
+	encryptor := shutter.Initialize(config.UpstreamRPCURL, config.KeyperSetManagerAddress, config.KeyBroadcastAddress, maxInclusionWindow)
 
 	return &RPCServer{
 		config:     config,
 		txStore:    txStore,
 		httpClient: &http.Client{},
+		Encryptor:  encryptor,
 	}, nil
 }
 
@@ -192,7 +187,7 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		return
 	}
 
-	encryptedTx, _, err := shutter.EncryptTransaction(rawTx, txHash, s.config.BidderNodeAddress)
+	encryptedTx, _, err := s.Encryptor.EncryptTransaction(rawTx, txHash, s.config.BidderNodeAddress)
 	if err != nil {
 		log.Error().
 			Err(err).

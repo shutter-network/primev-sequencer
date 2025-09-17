@@ -18,45 +18,37 @@ import (
 	"primev-poc/utils"
 )
 
-type Config struct {
+type Encryptor struct {
 	EthereumRPCURL          string
 	KeyperSetManagerAddress string
 	KeyBroadcastAddress     string
 	MaxInclusionWindow      uint64
 }
 
-var (
-	config *Config
-)
-
-func Initialize(cfg *Config) {
-	config = cfg
-	log.Info().
-		Str("ethereum_rpc", cfg.EthereumRPCURL).
-		Str("keyper_set_manager", cfg.KeyperSetManagerAddress).
-		Str("key_broadcast", cfg.KeyBroadcastAddress).
-		Uint64("max_inclusion_window", cfg.MaxInclusionWindow).
-		Msg("Initialized shutter package configuration")
+func Initialize(rpcURL string, keyperSetManagerAddress string, keyBroadcastAddress string, maxInclusionWindow uint64) *Encryptor {
+	return &Encryptor{
+		EthereumRPCURL:          rpcURL,
+		KeyperSetManagerAddress: keyperSetManagerAddress,
+		KeyBroadcastAddress:     keyBroadcastAddress,
+		MaxInclusionWindow:      maxInclusionWindow,
+	}
 }
 
-func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress string) (*txstore.EncryptedTransaction, common.Hash, error) {
-	if config == nil {
-		return nil, common.Hash{}, fmt.Errorf("shutter package not initialized - call Initialize() first")
-	}
+func (e *Encryptor) EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress string) (*txstore.EncryptedTransaction, common.Hash, error) {
 
-	currentBlockNum, err := GetCurrentBlockNumber()
+	currentBlockNum, err := e.GetCurrentBlockNumber()
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to get current block number: %w", err)
 	}
 
-	scheduledBlock := currentBlockNum + config.MaxInclusionWindow
+	scheduledBlock := currentBlockNum + e.MaxInclusionWindow
 
-	eonID, err := getEonForBlock(scheduledBlock)
+	eonID, err := e.getEonForBlock(scheduledBlock)
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to get eon for scheduled block: %w", err)
 	}
 
-	eonPublicKey, err := fetchEonKeyForEon(eonID)
+	eonPublicKey, err := e.fetchEonKeyForEon(eonID)
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to fetch eon public key for eon %d: %w", eonID, err)
 	}
@@ -130,11 +122,8 @@ func encryptWithShutter(data []byte, eonID uint64, sigma []byte, eonPublicKey []
 	return encryptedData, nil
 }
 
-func GetCurrentBlockNumber() (uint64, error) {
-	if config == nil {
-		return 0, fmt.Errorf("shutter package not initialized - call Initialize() first")
-	}
-	client, err := ethclient.Dial(config.EthereumRPCURL)
+func (e *Encryptor) GetCurrentBlockNumber() (uint64, error) {
+	client, err := ethclient.Dial(e.EthereumRPCURL)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to Ethereum client: %w", err)
 	}
@@ -148,17 +137,14 @@ func GetCurrentBlockNumber() (uint64, error) {
 	return blockNumber, nil
 }
 
-func getEonForBlock(blockNumber uint64) (uint64, error) {
-	if config == nil {
-		return 0, fmt.Errorf("shutter package not initialized - call Initialize() first")
-	}
-	client, err := ethclient.Dial(config.EthereumRPCURL)
+func (e *Encryptor) getEonForBlock(blockNumber uint64) (uint64, error) {
+	client, err := ethclient.Dial(e.EthereumRPCURL)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to Ethereum client: %w", err)
 	}
 	defer client.Close()
 
-	keyperSetManagerAddress := common.HexToAddress(config.KeyperSetManagerAddress)
+	keyperSetManagerAddress := common.HexToAddress(e.KeyperSetManagerAddress)
 	keyperSetManager, err := keypersetmanager.NewKeypersetmanager(keyperSetManagerAddress, client)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create KeyperSetManager instance: %w", err)
@@ -178,17 +164,14 @@ func getEonForBlock(blockNumber uint64) (uint64, error) {
 	return eonID, nil
 }
 
-func fetchEonKeyForEon(eonID uint64) ([]byte, error) {
-	if config == nil {
-		return nil, fmt.Errorf("shutter package not initialized - call Initialize() first")
-	}
-	client, err := ethclient.Dial(config.EthereumRPCURL)
+func (e *Encryptor) fetchEonKeyForEon(eonID uint64) ([]byte, error) {
+	client, err := ethclient.Dial(e.EthereumRPCURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Ethereum client: %w", err)
 	}
 	defer client.Close()
 
-	keyBroadcastAddress := common.HexToAddress(config.KeyBroadcastAddress)
+	keyBroadcastAddress := common.HexToAddress(e.KeyBroadcastAddress)
 	keyBroadcast, err := keybroadcastcontract.NewKeybroadcastcontract(keyBroadcastAddress, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create KeyBroadcast instance: %w", err)
