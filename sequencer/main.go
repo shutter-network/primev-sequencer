@@ -37,6 +37,18 @@ var (
 	MaxInclusionWindow = uint64(30)
 )
 
+type SequencerConfig struct {
+	RpcPort                 string
+	ApiPort                 string
+	UpstreamRPCURL          string
+	GrpcAddr                string
+	InstanceId              uint64
+	p2pConfig               p2p.Config
+	bidderNodeAddress       string
+	KeyperSetManagerAddress string
+	KeyBroadcastAddress     string
+}
+
 func main() {
 	status := 0
 
@@ -64,88 +76,23 @@ func Cmd() *cobra.Command {
 }
 
 func startSequencer() error {
-	// Get config values from environment variables
-	rpcPort := getEnvOrDefault("RPC_PORT", "8545")
-	apiPort := getEnvOrDefault("API_PORT", "8080")
-	upstreamRPCURL := getEnvOrDefault("UPSTREAM_RPC_URL", "http://localhost:8546")
-	keyperSetManagerAddress := os.Getenv("KEYPER_SET_MANAGER_ADDRESS")
-	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
-	grpcAddr := os.Getenv("GRPC_ADDR")
-	instanceId := os.Getenv("INSTANCE_ID")
-	bidderNodeAddress := os.Getenv("BIDDER_NODE_ADDRESS")
-	// Validate required environment variables
-	if keyperSetManagerAddress == "" {
-		return fmt.Errorf("KEYPER_SET_MANAGER_ADDRESS environment variable is required")
-	}
-	if keyBroadcastAddress == "" {
-		return fmt.Errorf("KEY_BROADCAST_ADDRESS environment variable is required")
-	}
-	if grpcAddr == "" {
-		return fmt.Errorf("GRPC_ADDR environment variable is required")
-	}
-	if instanceId == "" {
-		return fmt.Errorf("INSTANCE_ID environment variable is required")
-	}
-	instanceIdUint64, err := strconv.ParseUint(instanceId, 10, 64)
+
+	config, err := readFromEnv()
 	if err != nil {
-		return fmt.Errorf("failed to parse INSTANCE_ID: %w", err)
+		return fmt.Errorf("failed to read from env: %w", err)
 	}
 
 	zlog.Info().
-		Str("rpc-port", rpcPort).
-		Str("api-port", apiPort).
-		Str("upstream-rpc", upstreamRPCURL).
-		Str("grpc-addr", grpcAddr).
-		Msg("Starting PrimeV sequencer with integrated modules")
-
-	p2pConfig := p2p.Config{}
-	var p2pKey keys.Libp2pPrivate
-	p2pKeyString := os.Getenv("P2P_KEY")
-	if p2pKeyString == "" {
-		panic("P2P key not provided in the env")
-	}
-	if err := p2pKey.UnmarshalText([]byte(p2pKeyString)); err != nil {
-		panic("error unmarshalling P2P key")
-	}
-	p2pConfig.P2PKey = &p2pKey
-
-	bootstrapAddressesStringified := os.Getenv("P2P_BOOTSTRAP_ADDRESSES")
-	if bootstrapAddressesStringified == "" {
-		panic("bootstrap addresses not provided in the env")
-	}
-	bootstrapAddresses := strings.Split(bootstrapAddressesStringified, ",")
-
-	bootstrapP2PAddresses := make([]*address.P2PAddress, len(bootstrapAddresses))
-
-	for i, addr := range bootstrapAddresses {
-		bootstrapP2PAddresses[i] = address.MustP2PAddress(addr)
-	}
-	p2pConfig.CustomBootstrapAddresses = bootstrapP2PAddresses
-
-	p2pPort := os.Getenv("P2P_PORT")
-	if p2pPort == "" {
-		p2pPort = "23003"
-	}
-
-	p2pConfig.ListenAddresses = []*address.P2PAddress{
-		address.MustP2PAddress("/ip4/0.0.0.0/tcp/" + p2pPort),
-		address.MustP2PAddress("/ip4/0.0.0.0/udp/" + p2pPort + "/quic-v1"),
-		address.MustP2PAddress("/ip4/0.0.0.0/udp/" + p2pPort + "/quic-v1/webtransport"),
-		address.MustP2PAddress("/ip6/::/tcp/" + p2pPort),
-		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1"),
-		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1/webtransport"),
-	}
-	p2pEnviroment, err := strconv.ParseInt(os.Getenv("P2P_ENVIRONMENT"), 10, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse p2p environment: %w", err)
-	}
-	p2pConfig.Environment = env.Environment(p2pEnviroment)
-	p2pConfig.DiscoveryNamespace = os.Getenv("P2P_DISCOVERY_NAMESPACE")
+		Str("rpc-port", config.RpcPort).
+		Str("api-port", config.ApiPort).
+		Str("upstream-rpc", config.UpstreamRPCURL).
+		Str("grpc-addr", config.GrpcAddr).
+		Msg("Starting PrimeV sequencer")
 
 	txHandler := startTransactionHandler()
 
 	// Start Transaction Verifier
-	verifier, err := startTransactionVerifier(upstreamRPCURL, txHandler)
+	verifier, err := startTransactionVerifier(config.UpstreamRPCURL, txHandler)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction verifier: %w", err)
 	}
@@ -155,34 +102,34 @@ func startSequencer() error {
 	restAPI := api.NewRestAPI(txHandler)
 	apiMux := restAPI.SetupRoutes()
 	apiServer := &http.Server{
-		Addr:    ":" + apiPort,
+		Addr:    ":" + config.ApiPort,
 		Handler: apiMux,
 	}
 
 	// Start API server in a goroutine
 	go func() {
-		zlog.Info().Str("port", apiPort).Msg("Starting REST API server")
+		zlog.Info().Str("port", config.ApiPort).Msg("Starting REST API server")
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			zlog.Error().Err(err).Msg("REST API server error")
 		}
 	}()
 
-	p2p := primevp2p.NewP2P(&p2pConfig, txHandler, bidderNodeAddress)
+	p2p := primevp2p.NewP2P(&config.p2pConfig, txHandler, config.bidderNodeAddress)
 
-	config := &rpc.Config{
-		Port:                    rpcPort,
-		UpstreamRPCURL:          upstreamRPCURL,
-		KeyperSetManagerAddress: keyperSetManagerAddress,
-		KeyBroadcastAddress:     keyBroadcastAddress,
-		BidderNodeAddress:       bidderNodeAddress,
+	rpcConfig := &rpc.Config{
+		Port:                    config.RpcPort,
+		UpstreamRPCURL:          config.UpstreamRPCURL,
+		KeyperSetManagerAddress: config.KeyperSetManagerAddress,
+		KeyBroadcastAddress:     config.KeyBroadcastAddress,
+		BidderNodeAddress:       config.bidderNodeAddress,
 	}
 
-	rpcServer, err := rpc.NewRPCServer(config, txHandler, MaxInclusionWindow)
+	rpcServer, err := rpc.NewRPCServer(rpcConfig, txHandler, MaxInclusionWindow)
 	if err != nil {
 		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
 
-	err = startSequencerModule(txHandler, p2p, grpcAddr, instanceIdUint64)
+	err = startSequencerModule(txHandler, p2p, config.GrpcAddr, config.InstanceId)
 	if err != nil {
 		return fmt.Errorf("failed to start sequencer module: %w", err)
 	}
@@ -380,4 +327,88 @@ func getIdentityPrefixes(bidOptions *bidderapiv1.BidOptions) ([]string, error) {
 		}
 	}
 	return identities, nil
+}
+
+func readFromEnv() (*SequencerConfig, error) {
+	// Get config values from environment variables
+	rpcPort := getEnvOrDefault("RPC_PORT", "8545")
+	apiPort := getEnvOrDefault("API_PORT", "8080")
+	upstreamRPCURL := getEnvOrDefault("UPSTREAM_RPC_URL", "http://localhost:8546")
+	keyperSetManagerAddress := os.Getenv("KEYPER_SET_MANAGER_ADDRESS")
+	keyBroadcastAddress := os.Getenv("KEY_BROADCAST_ADDRESS")
+	grpcAddr := os.Getenv("GRPC_ADDR")
+	instanceId := os.Getenv("INSTANCE_ID")
+	bidderNodeAddress := os.Getenv("BIDDER_NODE_ADDRESS")
+	if keyperSetManagerAddress == "" {
+		return nil, fmt.Errorf("KEYPER_SET_MANAGER_ADDRESS environment variable is required")
+	}
+	if keyBroadcastAddress == "" {
+		return nil, fmt.Errorf("KEY_BROADCAST_ADDRESS environment variable is required")
+	}
+	if grpcAddr == "" {
+		return nil, fmt.Errorf("GRPC_ADDR environment variable is required")
+	}
+	if instanceId == "" {
+		return nil, fmt.Errorf("INSTANCE_ID environment variable is required")
+	}
+	instanceIdUint64, err := strconv.ParseUint(instanceId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse INSTANCE_ID: %w", err)
+	}
+
+	p2pConfig := p2p.Config{}
+	var p2pKey keys.Libp2pPrivate
+	p2pKeyString := os.Getenv("P2P_KEY")
+	if p2pKeyString == "" {
+		panic("P2P key not provided in the env")
+	}
+	if err := p2pKey.UnmarshalText([]byte(p2pKeyString)); err != nil {
+		panic("error unmarshalling P2P key")
+	}
+	p2pConfig.P2PKey = &p2pKey
+
+	bootstrapAddressesStringified := os.Getenv("P2P_BOOTSTRAP_ADDRESSES")
+	if bootstrapAddressesStringified == "" {
+		panic("bootstrap addresses not provided in the env")
+	}
+	bootstrapAddresses := strings.Split(bootstrapAddressesStringified, ",")
+
+	bootstrapP2PAddresses := make([]*address.P2PAddress, len(bootstrapAddresses))
+
+	for i, addr := range bootstrapAddresses {
+		bootstrapP2PAddresses[i] = address.MustP2PAddress(addr)
+	}
+	p2pConfig.CustomBootstrapAddresses = bootstrapP2PAddresses
+
+	p2pPort := os.Getenv("P2P_PORT")
+	if p2pPort == "" {
+		p2pPort = "23003"
+	}
+
+	p2pConfig.ListenAddresses = []*address.P2PAddress{
+		address.MustP2PAddress("/ip4/0.0.0.0/tcp/" + p2pPort),
+		address.MustP2PAddress("/ip4/0.0.0.0/udp/" + p2pPort + "/quic-v1"),
+		address.MustP2PAddress("/ip4/0.0.0.0/udp/" + p2pPort + "/quic-v1/webtransport"),
+		address.MustP2PAddress("/ip6/::/tcp/" + p2pPort),
+		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1"),
+		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1/webtransport"),
+	}
+	p2pEnviroment, err := strconv.ParseInt(os.Getenv("P2P_ENVIRONMENT"), 10, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse p2p environment: %w", err)
+	}
+	p2pConfig.Environment = env.Environment(p2pEnviroment)
+	p2pConfig.DiscoveryNamespace = os.Getenv("P2P_DISCOVERY_NAMESPACE")
+
+	return &SequencerConfig{
+		RpcPort:                 rpcPort,
+		ApiPort:                 apiPort,
+		UpstreamRPCURL:          upstreamRPCURL,
+		GrpcAddr:                grpcAddr,
+		InstanceId:              instanceIdUint64,
+		p2pConfig:               p2pConfig,
+		bidderNodeAddress:       bidderNodeAddress,
+		KeyperSetManagerAddress: keyperSetManagerAddress,
+		KeyBroadcastAddress:     keyBroadcastAddress,
+	}, nil
 }
