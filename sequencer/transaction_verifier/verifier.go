@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 )
 
 // TransactionVerifier handles verification of decrypted transactions on the blockchain
@@ -43,8 +44,17 @@ func NewTransactionVerifier(rpcURL string, txHandler *txhandler.TransactionHandl
 }
 
 // Start begins the verification process in a goroutine
-func (tv *TransactionVerifier) Start() {
-	go tv.verificationLoop()
+func (tv *TransactionVerifier) Start(ctx context.Context, runner service.Runner) error {
+	runner.Go(func() error {
+		tv.verificationLoop()
+		return nil
+	})
+	runner.Go(func() error {
+		<-ctx.Done()
+		tv.Stop()
+		return nil
+	})
+	return nil
 }
 
 // Stop stops the verification process

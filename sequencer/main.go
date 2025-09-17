@@ -46,6 +46,7 @@ type SequencerConfig struct {
 	bidderNodeAddress       string
 	KeyperSetManagerAddress string
 	KeyBroadcastAddress     string
+	VerificationInterval    time.Duration
 }
 
 func main() {
@@ -88,14 +89,13 @@ func runSequencer() error {
 		Str("grpc-addr", config.GrpcAddr).
 		Msg("Starting PrimeV sequencer")
 
-	txHandler := startTransactionHandler()
+	txHandler := txhandler.NewTransactionHandler()
 
 	// Start Transaction Verifier
-	verifier, err := startTransactionVerifier(config.UpstreamRPCURL, txHandler)
+	verifier, err := transaction_verifier.NewTransactionVerifier(config.UpstreamRPCURL, txHandler, config.VerificationInterval)
 	if err != nil {
-		return fmt.Errorf("failed to start transaction verifier: %w", err)
+		return fmt.Errorf("failed to create transaction verifier: %w", err)
 	}
-	defer verifier.Stop()
 
 	restAPI := api.NewRestAPI(txHandler, config.ApiPort)
 
@@ -120,7 +120,7 @@ func runSequencer() error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service.Run(ctx, p2p, rpcServer, restAPI)
+	service.Run(ctx, p2p, rpcServer, restAPI, verifier)
 
 	zlog.Info().Msg("All modules started successfully")
 
@@ -133,40 +133,6 @@ func runSequencer() error {
 
 	zlog.Info().Msg("All modules stopped")
 	return nil
-}
-
-func startTransactionHandler() *txhandler.TransactionHandler {
-	zlog.Info().Msg("Starting transaction handler module")
-
-	txHandler := txhandler.NewTransactionHandler()
-
-	zlog.Info().Msg("Transaction handler module started successfully")
-	return txHandler
-}
-
-func startTransactionVerifier(rpcURL string, txHandler *txhandler.TransactionHandler) (*transaction_verifier.TransactionVerifier, error) {
-	zlog.Info().Msg("Starting transaction verifier module")
-
-	// Get verification interval from environment variable, default to 30 seconds
-	verificationInterval := getEnvOrDefault("VERIFICATION_INTERVAL", "10s")
-	interval, err := time.ParseDuration(verificationInterval)
-	if err != nil {
-		zlog.Warn().Str("interval", verificationInterval).Msg("Invalid verification interval, using default 30s")
-		interval = 30 * time.Second
-	}
-
-	verifier, err := transaction_verifier.NewTransactionVerifier(rpcURL, txHandler, interval)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transaction verifier: %w", err)
-	}
-
-	verifier.Start()
-	zlog.Info().
-		Str("rpc_url", rpcURL).
-		Dur("interval", interval).
-		Msg("Transaction verifier module started successfully")
-
-	return verifier, nil
 }
 
 func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2p.P2P, grpcAddr string, instanceId uint64) error {
@@ -385,6 +351,12 @@ func readFromEnv() (*SequencerConfig, error) {
 	p2pConfig.Environment = env.Environment(p2pEnviroment)
 	p2pConfig.DiscoveryNamespace = getEnvOrDefault("P2P_DISCOVERY_NAMESPACE", "primev-poc")
 
+	verificationInterval := getEnvOrDefault("VERIFICATION_INTERVAL", "10s")
+	interval, err := time.ParseDuration(verificationInterval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse VERIFICATION_INTERVAL: %w", err)
+	}
+
 	return &SequencerConfig{
 		RpcPort:                 rpcPort,
 		ApiPort:                 apiPort,
@@ -395,5 +367,6 @@ func readFromEnv() (*SequencerConfig, error) {
 		bidderNodeAddress:       bidderNodeAddress,
 		KeyperSetManagerAddress: keyperSetManagerAddress,
 		KeyBroadcastAddress:     keyBroadcastAddress,
+		VerificationInterval:    interval,
 	}, nil
 }
