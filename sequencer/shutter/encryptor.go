@@ -81,7 +81,7 @@ func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress stri
 	}
 
 	encryptedTx := &txhandler.EncryptedTransaction{
-		EonID:              eonID,
+		Eon:                eonID,
 		MaxInclusionWindow: scheduledBlock,
 		EncryptedTx:        encryptedData,
 		TxHash:             txHash.Bytes(),

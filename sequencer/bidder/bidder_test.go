@@ -29,7 +29,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 		// Create a mock encrypted transaction
 		hash1 := common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111")
 		encryptedTx := &txhandler.EncryptedTransaction{
-			EonID:              1,
+			Eon:                1,
 			MaxInclusionWindow: 1000,
 			EncryptedTx:        []byte("encrypted_data_1"),
 			TxHash:             hash1.Bytes(), // Store the same hash as bytes
@@ -76,7 +76,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 
 		for i, hash := range hashes {
 			encryptedTx := &txhandler.EncryptedTransaction{
-				EonID:              1,
+				Eon:                1,
 				MaxInclusionWindow: block,
 				EncryptedTx:        []byte("encrypted_data_" + string(rune(i+2))),
 				TxHash:             hash.Bytes(), // Store the same hash as bytes
@@ -138,7 +138,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 		// Store all transactions
 		for _, data := range testData {
 			encryptedTx := &txhandler.EncryptedTransaction{
-				EonID:              1,
+				Eon:                1,
 				MaxInclusionWindow: data.maxInclusionWindow,
 				EncryptedTx:        []byte("encrypted_data_" + data.hash.Hex()[:10]),
 				TxHash:             data.hash.Bytes(), // Store the same hash as bytes
@@ -184,7 +184,7 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 
 		for i, hash := range hashes {
 			encryptedTx := &txhandler.EncryptedTransaction{
-				EonID:              1,
+				Eon:                1,
 				MaxInclusionWindow: uint64(1000 + i), // 1000, 1001
 				EncryptedTx:        []byte("encrypted_data_" + string(rune(i+1))),
 				TxHash:             hash.Bytes(), // Store the same hash as bytes
@@ -216,7 +216,7 @@ func TestBidManager_UpdateTransactionStatuses(t *testing.T) {
 	// Create and store a transaction
 	hash := common.HexToHash("0x7777777777777777777777777777777777777777777777777777777777777777")
 	encryptedTx := &txhandler.EncryptedTransaction{
-		EonID:              1,
+		Eon:                1,
 		MaxInclusionWindow: 4000,
 		EncryptedTx:        []byte("encrypted_data"),
 		TxHash:             hash.Bytes(), // Store the same hash as bytes

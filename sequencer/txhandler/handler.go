@@ -23,7 +23,7 @@ const (
 )
 
 type EncryptedTransaction struct {
-	EonID              uint64
+	Eon                uint64
 	MaxInclusionWindow uint64
 	EncryptedTx        []byte
 	TxHash             []byte
@@ -72,7 +72,7 @@ func (th *TransactionHandler) StoreTransaction(hash common.Hash, encryptedTx *En
 	log.Info().
 		Str("tx_hash", hash.Hex()).
 		Uint64("max_inclusion_window", encryptedTx.MaxInclusionWindow).
-		Uint64("eon_id", encryptedTx.EonID).
+		Uint64("eon", encryptedTx.Eon).
 		Str("status", string(StatusInit)).
 		Msg("Transaction stored")
 

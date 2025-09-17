@@ -32,7 +32,7 @@ func TestTransactionVerifier_GetVerificationStats(t *testing.T) {
 	hash2 := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
 
 	encryptedTx1 := &txhandler.EncryptedTransaction{
-		EonID:              1,
+		Eon:                1,
 		MaxInclusionWindow: 10,
 		EncryptedTx:        []byte("encrypted1"),
 		TxHash:             hash1.Bytes(),
@@ -41,7 +41,7 @@ func TestTransactionVerifier_GetVerificationStats(t *testing.T) {
 	}
 
 	encryptedTx2 := &txhandler.EncryptedTransaction{
-		EonID:              2,
+		Eon:                2,
 		MaxInclusionWindow: 20,
 		EncryptedTx:        []byte("encrypted2"),
 		TxHash:             hash2.Bytes(),

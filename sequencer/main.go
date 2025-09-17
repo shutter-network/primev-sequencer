@@ -75,7 +75,10 @@ func Cmd() *cobra.Command {
 		Short: "PrimeV PoC - Sequencer",
 		Long:  "A proof of concept implementation that starts the sequencer with integrated RPC server and other modules",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			setupLogging()
+			err := setupLogging()
+			if err != nil {
+				return fmt.Errorf("failed to setup logging: %w", err)
+			}
 			return runSequencer()
 		},
 	}
@@ -186,7 +189,7 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 				}
 
 				if bid != nil {
-					zlog.Info().
+					zlog.Debug().
 						Int64("block_number", bid.BlockNumber).
 						Int("tx_count", len(txHashes)).
 						Str("amount", bid.Amount).
@@ -209,7 +212,7 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 						}
 						continue
 					}
-					zlog.Info().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
+					zlog.Debug().Int("commitment_count", len(commitments)).Msg("Received commitments from gRPC server")
 
 					for _, c := range commitments {
 						identityPrefixes, err := getIdentityPrefixes(c.BidOptions)
@@ -239,7 +242,6 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 							zlog.Error().Err(err).Msg("Failed to send commitment to keypers")
 							continue
 						}
-						zlog.Info().Msg("Sent commitment")
 
 						zlog.Info().
 							Strs("tx_hashes", c.GetTxHashes()).
@@ -262,13 +264,14 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func setupLogging() {
+func setupLogging() error {
 	level, err := zerolog.ParseLevel(logLevel)
 	if err != nil {
-		level = zerolog.InfoLevel
+		return err
 	}
 	zerolog.SetGlobalLevel(level)
 	zlog.Logger = zlog.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	return nil
 }
 
 func getIdentityPrefixes(bidOptions *bidderapiv1.BidOptions) ([]string, error) {
