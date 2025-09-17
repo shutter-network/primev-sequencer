@@ -49,6 +49,16 @@ type SequencerConfig struct {
 	VerificationInterval    time.Duration
 }
 
+type Sequencer struct {
+	txHandler  *txhandler.TransactionHandler
+	grpcAddr   string
+	instanceId uint64
+	p2p        *primevp2p.P2P
+	rpcServer  *rpc.RPCServer
+	restAPI    *api.RestAPI
+	verifier   *transaction_verifier.TransactionVerifier
+}
+
 func main() {
 	status := 0
 
@@ -114,13 +124,18 @@ func runSequencer() error {
 		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
 
-	err = startSequencerModule(txHandler, p2p, config.GrpcAddr, config.InstanceId)
-	if err != nil {
-		return fmt.Errorf("failed to start sequencer module: %w", err)
+	sequencer := &Sequencer{
+		txHandler:  txHandler,
+		grpcAddr:   config.GrpcAddr,
+		instanceId: config.InstanceId,
+		p2p:        p2p,
+		rpcServer:  rpcServer,
+		restAPI:    restAPI,
+		verifier:   verifier,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service.Run(ctx, p2p, rpcServer, restAPI, verifier)
+	service.Run(ctx, sequencer, p2p, rpcServer, restAPI, verifier)
 
 	zlog.Info().Msg("All modules started successfully")
 
@@ -130,30 +145,28 @@ func runSequencer() error {
 	cancel()
 
 	zlog.Info().Msg("Shutting down all modules...")
-
-	zlog.Info().Msg("All modules stopped")
 	return nil
 }
 
-func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2p.P2P, grpcAddr string, instanceId uint64) error {
+func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 	zlog.Info().Msg("Starting sequencer core module")
 
-	bidManager := bidder.NewBidManager(txHandler)
+	bidManager := bidder.NewBidManager(s.txHandler)
 
 	go func() {
 		zlog.Info().Msg("Sequencer core module running")
 
-		statusTicker := time.NewTicker(30 * time.Second)
+		statusTicker := time.NewTicker(10 * time.Second)
 		defer statusTicker.Stop()
 
-		bidTicker := time.NewTicker(30 * time.Second)
+		bidTicker := time.NewTicker(10 * time.Second)
 		defer bidTicker.Stop()
 
 		for {
 			select {
 			case <-statusTicker.C:
-				count := txHandler.GetTransactionCount()
-				statusCounts := txHandler.GetStatusCounts()
+				count := s.txHandler.GetTransactionCount()
+				statusCounts := s.txHandler.GetStatusCounts()
 				zlog.Info().
 					Int("total_transactions", count).
 					Interface("status_counts", statusCounts).
@@ -174,21 +187,21 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 
 				if bid != nil {
 					zlog.Info().
-						Uint64("block_number", uint64(bid.BlockNumber)).
+						Int64("block_number", bid.BlockNumber).
 						Int("tx_count", len(txHashes)).
 						Str("amount", bid.Amount).
-						Uint64("decay_start", uint64(bid.DecayStartTimestamp)).
-						Uint64("decay_end", uint64(bid.DecayEndTimestamp)).
+						Int64("decay_start", bid.DecayStartTimestamp).
+						Int64("decay_end", bid.DecayEndTimestamp).
 						Str("slash_amount", bid.SlashAmount).
 						Msg("Bid created")
 
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-					commitments, err := bidManager.SubmitBidGRPC(ctx, grpcAddr, bid)
+					commitments, err := bidManager.SubmitBidGRPC(ctx, s.grpcAddr, bid)
 					cancel()
 					if err != nil || len(commitments) == 0 {
 						zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
 						for _, txHash := range txHashes {
-							err = txHandler.UpdateTransactionStatus(txHash, txhandler.StatusInit)
+							err = s.txHandler.UpdateTransactionStatus(txHash, txhandler.StatusInit)
 							if err != nil {
 								zlog.Error().Err(err).Msg("Failed to update transaction status")
 								continue
@@ -205,8 +218,8 @@ func startSequencerModule(txHandler *txhandler.TransactionHandler, p2p *primevp2
 							continue
 						}
 						ctx, _ := context.WithTimeout(context.Background(), 2*time.Minute)
-						err = p2p.SendMessage(ctx, &p2pmsg.Commitment{
-							InstanceId:           instanceId,
+						err = s.p2p.SendMessage(ctx, &p2pmsg.Commitment{
+							InstanceId:           s.instanceId,
 							TxHashes:             c.GetTxHashes(),
 							BidAmount:            c.GetBidAmount(),
 							BlockNumber:          c.GetBlockNumber(),
