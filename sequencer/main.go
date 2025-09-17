@@ -66,7 +66,7 @@ func Cmd() *cobra.Command {
 		Long:  "A proof of concept implementation that starts the sequencer with integrated RPC server and other modules",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			setupLogging()
-			return startSequencer()
+			return runSequencer()
 		},
 	}
 
@@ -75,7 +75,7 @@ func Cmd() *cobra.Command {
 	return rootCmd
 }
 
-func startSequencer() error {
+func runSequencer() error {
 
 	config, err := readFromEnv()
 	if err != nil {
@@ -360,16 +360,16 @@ func readFromEnv() (*SequencerConfig, error) {
 	var p2pKey keys.Libp2pPrivate
 	p2pKeyString := os.Getenv("P2P_KEY")
 	if p2pKeyString == "" {
-		panic("P2P key not provided in the env")
+		return nil, fmt.Errorf("P2P key not provided in the env")
 	}
 	if err := p2pKey.UnmarshalText([]byte(p2pKeyString)); err != nil {
-		panic("error unmarshalling P2P key")
+		return nil, fmt.Errorf("error unmarshalling P2P key: %w", err)
 	}
 	p2pConfig.P2PKey = &p2pKey
 
 	bootstrapAddressesStringified := os.Getenv("P2P_BOOTSTRAP_ADDRESSES")
 	if bootstrapAddressesStringified == "" {
-		panic("bootstrap addresses not provided in the env")
+		return nil, fmt.Errorf("bootstrap addresses not provided in the env")
 	}
 	bootstrapAddresses := strings.Split(bootstrapAddressesStringified, ",")
 
@@ -380,10 +380,7 @@ func readFromEnv() (*SequencerConfig, error) {
 	}
 	p2pConfig.CustomBootstrapAddresses = bootstrapP2PAddresses
 
-	p2pPort := os.Getenv("P2P_PORT")
-	if p2pPort == "" {
-		p2pPort = "23003"
-	}
+	p2pPort := getEnvOrDefault("P2P_PORT", "23003")
 
 	p2pConfig.ListenAddresses = []*address.P2PAddress{
 		address.MustP2PAddress("/ip4/0.0.0.0/tcp/" + p2pPort),
@@ -393,12 +390,12 @@ func readFromEnv() (*SequencerConfig, error) {
 		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1"),
 		address.MustP2PAddress("/ip6/::/udp/" + p2pPort + "/quic-v1/webtransport"),
 	}
-	p2pEnviroment, err := strconv.ParseInt(os.Getenv("P2P_ENVIRONMENT"), 10, 0)
+	p2pEnviroment, err := strconv.ParseInt(getEnvOrDefault("P2P_ENVIRONMENT", "0"), 10, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse p2p environment: %w", err)
 	}
 	p2pConfig.Environment = env.Environment(p2pEnviroment)
-	p2pConfig.DiscoveryNamespace = os.Getenv("P2P_DISCOVERY_NAMESPACE")
+	p2pConfig.DiscoveryNamespace = getEnvOrDefault("P2P_DISCOVERY_NAMESPACE", "primev-poc")
 
 	return &SequencerConfig{
 		RpcPort:                 rpcPort,
