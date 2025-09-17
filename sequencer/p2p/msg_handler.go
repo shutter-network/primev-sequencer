@@ -29,14 +29,10 @@ func NewDecryptionKeysMsgHandler(txStore *txstore.TransactionStore, config *Hand
 func (mh *DecryptionKeysMsgHandler) MessagePrototypes() []p2pmsg.Message {
 	return []p2pmsg.Message{
 		&p2pmsg.DecryptionKeys{},
-		&p2pmsg.Commitment{},
 	}
 }
 
 func (mh *DecryptionKeysMsgHandler) ValidateMessage(_ context.Context, msgUntyped p2pmsg.Message) (pubsub.ValidationResult, error) {
-	if _, ok := msgUntyped.(*p2pmsg.Commitment); ok {
-		return pubsub.ValidationAccept, nil
-	}
 	msg, ok := msgUntyped.(*p2pmsg.DecryptionKeys)
 	if !ok {
 		return pubsub.ValidationReject, fmt.Errorf("unknown message type: %T", msgUntyped)
@@ -78,5 +74,29 @@ func (mh *DecryptionKeysMsgHandler) HandleMessage(ctx context.Context, msg p2pms
 			Msg("Decryption key received")
 	}
 
+	return []p2pmsg.Message{}, nil
+}
+
+type CommitmentMsgHandler struct {
+}
+
+func NewCommitmentMsgHandler() *CommitmentMsgHandler {
+	return &CommitmentMsgHandler{}
+}
+
+func (mh *CommitmentMsgHandler) MessagePrototypes() []p2pmsg.Message {
+	return []p2pmsg.Message{
+		&p2pmsg.Commitment{},
+	}
+}
+
+func (mh *CommitmentMsgHandler) ValidateMessage(_ context.Context, msgUntyped p2pmsg.Message) (pubsub.ValidationResult, error) {
+	if _, ok := msgUntyped.(*p2pmsg.Commitment); ok {
+		return pubsub.ValidationAccept, nil
+	}
+	return pubsub.ValidationReject, fmt.Errorf("unknown message type: %T", msgUntyped)
+}
+
+func (mh *CommitmentMsgHandler) HandleMessage(ctx context.Context, msg p2pmsg.Message) ([]p2pmsg.Message, error) {
 	return []p2pmsg.Message{}, nil
 }

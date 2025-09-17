@@ -26,8 +26,12 @@ func NewP2P(config *p2p.Config, txStore *txstore.TransactionStore, bidderNodeAdd
 }
 
 func (p *P2P) Start(ctx context.Context, runner service.Runner) error {
-	msgHandler := NewDecryptionKeysMsgHandler(p.txStore, &HandlerConfig{BidderNodeAddress: p.bidderNodeAddress})
-	p.service.AddMessageHandler(msgHandler)
+	decryptionKeysMsgHandler := NewDecryptionKeysMsgHandler(p.txStore, &HandlerConfig{BidderNodeAddress: p.bidderNodeAddress})
+	commitmentMsgHandler := NewCommitmentMsgHandler()
+
+	p.service.AddMessageHandler(decryptionKeysMsgHandler)
+	p.service.AddMessageHandler(commitmentMsgHandler)
+
 	return runner.StartService(p.service)
 }
 
