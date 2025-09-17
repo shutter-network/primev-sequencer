@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"primev-poc/shutter"
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
@@ -28,7 +28,7 @@ type Config struct {
 
 type RPCServer struct {
 	config     *Config
-	txHandler  *txhandler.TransactionHandler
+	txStore    *txstore.TransactionStore
 	httpClient *http.Client
 }
 
@@ -52,7 +52,7 @@ type RPCError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-func NewRPCServer(config *Config, txHandler *txhandler.TransactionHandler, maxInclusionWindow uint64) (*RPCServer, error) {
+func NewRPCServer(config *Config, txStore *txstore.TransactionStore, maxInclusionWindow uint64) (*RPCServer, error) {
 	shutterConfig := &shutter.Config{
 		EthereumRPCURL:          config.UpstreamRPCURL,
 		KeyperSetManagerAddress: config.KeyperSetManagerAddress,
@@ -65,7 +65,7 @@ func NewRPCServer(config *Config, txHandler *txhandler.TransactionHandler, maxIn
 
 	return &RPCServer{
 		config:     config,
-		txHandler:  txHandler,
+		txStore:    txStore,
 		httpClient: &http.Client{},
 	}, nil
 }
@@ -181,7 +181,7 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		Str("tx_hash", txHash.Hex()).
 		Msg("Processing encrypted transaction locally")
 
-	tx, err := s.txHandler.GetTransaction(txHash)
+	tx, err := s.txStore.GetTransaction(txHash)
 	if err == nil && tx != nil {
 		log.Debug().
 			Str("method", req.Method).
@@ -203,7 +203,7 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		return
 	}
 
-	err = s.txHandler.StoreTransaction(txHash, encryptedTx)
+	err = s.txStore.StoreTransaction(txHash, encryptedTx)
 	if err != nil {
 		log.Error().
 			Err(err).

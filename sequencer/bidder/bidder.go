@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"context"
 
@@ -23,27 +23,27 @@ const (
 )
 
 type BidManager struct {
-	txHandler   *txhandler.TransactionHandler
+	txStore     *txstore.TransactionStore
 	slashAmount string
 }
 
-func NewBidManager(txHandler *txhandler.TransactionHandler) *BidManager {
+func NewBidManager(txStore *txstore.TransactionStore) *BidManager {
 	return &BidManager{
-		txHandler:   txHandler,
+		txStore:     txStore,
 		slashAmount: DefaultSlashAmount,
 	}
 }
 
 // For testing, allow setting a custom slash amount
-func NewBidManagerWithSlash(txHandler *txhandler.TransactionHandler, slashAmount string) *BidManager {
+func NewBidManagerWithSlash(txStore *txstore.TransactionStore, slashAmount string) *BidManager {
 	return &BidManager{
-		txHandler:   txHandler,
+		txStore:     txStore,
 		slashAmount: slashAmount,
 	}
 }
 
 func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidderapi.Bid, []common.Hash, error) {
-	initTransactions := bm.txHandler.GetTransactionsByStatus(txhandler.StatusInit)
+	initTransactions := bm.txStore.GetTransactionsByStatus(txstore.StatusInit)
 
 	if len(initTransactions) == 0 {
 		log.Debug().Msg("No transactions with init status found")
@@ -54,7 +54,7 @@ func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidder
 		Int("transaction_count", len(initTransactions)).
 		Msg("Found transactions with init status, creating bids")
 
-	transactionsForBid := make([]*txhandler.StoredTransaction, 0)
+	transactionsForBid := make([]*txstore.StoredTransaction, 0)
 	hashesForBid := make([]common.Hash, 0)
 
 	blockedTransaction := make([]common.Hash, 0)
@@ -71,7 +71,7 @@ func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidder
 		}
 	}
 
-	err := bm.updateTransactionStatuses(blockedTransaction, txhandler.StatusBlocked)
+	err := bm.updateTransactionStatuses(blockedTransaction, txstore.StatusBlocked)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -87,7 +87,7 @@ func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidder
 		return nil, nil, err
 	}
 
-	err = bm.updateTransactionStatuses(hashesForBid, txhandler.StatusBidSubmitted)
+	err = bm.updateTransactionStatuses(hashesForBid, txstore.StatusBidSubmitted)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -104,7 +104,7 @@ func (bm *BidManager) CreateBidFromInitTransactions(blockNumber uint64) (*bidder
 	return bid, hashesForBid, nil
 }
 
-func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txhandler.StoredTransaction, hashes []common.Hash) (*bidderapi.Bid, error) {
+func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txstore.StoredTransaction, hashes []common.Hash) (*bidderapi.Bid, error) {
 	if len(transactions) == 0 {
 		return nil, fmt.Errorf("no transactions provided for block %d", blockNumber)
 	}
@@ -152,11 +152,11 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txha
 	return bid, nil
 }
 
-func (bm *BidManager) updateTransactionStatuses(hashes []common.Hash, newStatus txhandler.TransactionStatus) error {
+func (bm *BidManager) updateTransactionStatuses(hashes []common.Hash, newStatus txstore.TransactionStatus) error {
 	var errors []error
 
 	for _, hash := range hashes {
-		err := bm.txHandler.UpdateTransactionStatus(hash, newStatus)
+		err := bm.txStore.UpdateTransactionStatus(hash, newStatus)
 		if err != nil {
 			errors = append(errors, fmt.Errorf("failed to update status for tx %s: %w", hash.Hex(), err))
 		}
@@ -219,7 +219,7 @@ func (bm *BidManager) SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *b
 			// Remark these tx as init as they need to be sent again
 			for _, txHashHex := range bid.TxHashes {
 				hash := common.HexToHash(txHashHex)
-				_ = bm.txHandler.UpdateTransactionStatus(hash, txhandler.StatusInit)
+				_ = bm.txStore.UpdateTransactionStatus(hash, txstore.StatusInit)
 			}
 			log.Info().
 				Int("no of tx", len(bid.TxHashes)).
@@ -234,7 +234,7 @@ func (bm *BidManager) SubmitBidGRPC(ctx context.Context, grpcAddr string, bid *b
 			// Update all tx_hashes in txHandler to StatusCommitted
 			for _, txHashHex := range commitment.GetTxHashes() {
 				hash := common.HexToHash(txHashHex)
-				err := bm.txHandler.UpdateCommittedTransaction(hash, uint64(commitment.GetBlockNumber()))
+				err := bm.txStore.UpdateCommittedTransaction(hash, uint64(commitment.GetBlockNumber()))
 				if err != nil {
 					log.Error().
 						Err(err).

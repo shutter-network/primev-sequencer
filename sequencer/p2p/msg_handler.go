@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -18,12 +18,12 @@ type HandlerConfig struct {
 }
 
 type DecryptionKeysMsgHandler struct {
-	txHandler *txhandler.TransactionHandler
-	config    *HandlerConfig
+	txStore *txstore.TransactionStore
+	config  *HandlerConfig
 }
 
-func NewDecryptionKeysMsgHandler(txHandler *txhandler.TransactionHandler, config *HandlerConfig) *DecryptionKeysMsgHandler {
-	return &DecryptionKeysMsgHandler{txHandler: txHandler, config: config}
+func NewDecryptionKeysMsgHandler(txStore *txstore.TransactionStore, config *HandlerConfig) *DecryptionKeysMsgHandler {
+	return &DecryptionKeysMsgHandler{txStore: txStore, config: config}
 }
 
 func (mh *DecryptionKeysMsgHandler) MessagePrototypes() []p2pmsg.Message {
@@ -59,12 +59,12 @@ func (mh *DecryptionKeysMsgHandler) HandleMessage(ctx context.Context, msg p2pms
 	}
 
 	for _, key := range msgDecryptionKeys.Keys {
-		tx := mh.txHandler.GetTransactionsByIdentity(hex.EncodeToString(key.IdentityPreimage))
+		tx := mh.txStore.GetTransactionsByIdentity(hex.EncodeToString(key.IdentityPreimage))
 		if tx == nil {
 			continue
 		}
 		tx.EncryptedTx.DecryptionKey = key.Key
-		err := mh.txHandler.UpdateTransactionStatus(common.BytesToHash(tx.EncryptedTx.TxHash), txhandler.StatusDecrypted)
+		err := mh.txStore.UpdateTransactionStatus(common.BytesToHash(tx.EncryptedTx.TxHash), txstore.StatusDecrypted)
 		if err != nil {
 			log.Error().
 				Err(err).

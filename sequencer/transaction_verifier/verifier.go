@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -16,7 +16,7 @@ import (
 // TransactionVerifier handles verification of decrypted transactions on the blockchain
 type TransactionVerifier struct {
 	ethClient *ethclient.Client
-	txHandler *txhandler.TransactionHandler
+	txStore   *txstore.TransactionStore
 	rpcURL    string
 	interval  time.Duration
 	ctx       context.Context
@@ -24,7 +24,7 @@ type TransactionVerifier struct {
 }
 
 // NewTransactionVerifier creates a new transaction verifier instance
-func NewTransactionVerifier(rpcURL string, txHandler *txhandler.TransactionHandler, interval time.Duration) (*TransactionVerifier, error) {
+func NewTransactionVerifier(rpcURL string, txStore *txstore.TransactionStore, interval time.Duration) (*TransactionVerifier, error) {
 	// Create Ethereum client connection
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
@@ -35,7 +35,7 @@ func NewTransactionVerifier(rpcURL string, txHandler *txhandler.TransactionHandl
 
 	return &TransactionVerifier{
 		ethClient: client,
-		txHandler: txHandler,
+		txStore:   txStore,
 		rpcURL:    rpcURL,
 		interval:  interval,
 		ctx:       ctx,
@@ -91,7 +91,7 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 			Msg("Failed to get current block number")
 		return
 	}
-	decryptedTxs := tv.txHandler.GetTransactionsByCommitedBlock(blockNumber)
+	decryptedTxs := tv.txStore.GetTransactionsByCommitedBlock(blockNumber)
 
 	if len(decryptedTxs) == 0 {
 		return
@@ -112,7 +112,7 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 		}
 
 		if isOnBlockchain {
-			err = tv.txHandler.UpdateTransactionStatus(txHash, txhandler.StatusFinalised)
+			err = tv.txStore.UpdateTransactionStatus(txHash, txstore.StatusFinalised)
 			if err != nil {
 				log.Error().
 					Err(err).
@@ -124,7 +124,7 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 					Msg("Transaction verified on blockchain, status updated to finalised")
 			}
 		} else {
-			err := tv.txHandler.IncrementTransactionRetries(txHash)
+			err := tv.txStore.IncrementTransactionRetries(txHash)
 			if err != nil {
 				log.Error().
 					Err(err).
@@ -135,7 +135,7 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 				log.Error().
 					Str("tx_hash", txHash.Hex()).
 					Msg("Transaction not found on blockchain after max retries, status set to blocked")
-				err = tv.txHandler.UpdateTransactionStatus(txHash, txhandler.StatusBlocked)
+				err = tv.txStore.UpdateTransactionStatus(txHash, txstore.StatusBlocked)
 				if err != nil {
 					log.Error().
 						Err(err).
@@ -144,7 +144,7 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 				}
 				continue
 			}
-			err = tv.txHandler.UpdateTransactionStatus(txHash, txhandler.StatusInit)
+			err = tv.txStore.UpdateTransactionStatus(txHash, txstore.StatusInit)
 			if err != nil {
 				log.Error().
 					Err(err).
@@ -178,10 +178,10 @@ func (tv *TransactionVerifier) isTransactionOnBlockchain(txHash common.Hash) (bo
 
 // GetVerificationStats returns statistics about the verification process
 func (tv *TransactionVerifier) GetVerificationStats() map[string]interface{} {
-	statusCounts := tv.txHandler.GetStatusCounts()
+	statusCounts := tv.txStore.GetStatusCounts()
 
 	stats := map[string]interface{}{
-		"total_transactions":    tv.txHandler.GetTransactionCount(),
+		"total_transactions":    tv.txStore.GetTransactionCount(),
 		"status_counts":         statusCounts,
 		"rpc_url":               tv.rpcURL,
 		"verification_interval": tv.interval.String(),

@@ -14,7 +14,7 @@ import (
 	"github.com/shutter-network/contracts/v2/bindings/keypersetmanager"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 	"primev-poc/utils"
 )
 
@@ -39,7 +39,7 @@ func Initialize(cfg *Config) {
 		Msg("Initialized shutter package configuration")
 }
 
-func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress string) (*txhandler.EncryptedTransaction, common.Hash, error) {
+func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress string) (*txstore.EncryptedTransaction, common.Hash, error) {
 	if config == nil {
 		return nil, common.Hash{}, fmt.Errorf("shutter package not initialized - call Initialize() first")
 	}
@@ -80,7 +80,7 @@ func EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress stri
 		return nil, common.Hash{}, fmt.Errorf("failed to encrypt transaction: %w", err)
 	}
 
-	encryptedTx := &txhandler.EncryptedTransaction{
+	encryptedTx := &txstore.EncryptedTransaction{
 		Eon:                eonID,
 		MaxInclusionWindow: scheduledBlock,
 		EncryptedTx:        encryptedData,

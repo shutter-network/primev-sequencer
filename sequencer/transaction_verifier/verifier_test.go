@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
@@ -13,10 +13,10 @@ import (
 )
 
 func TestNewTransactionVerifier(t *testing.T) {
-	txHandler := txhandler.NewTransactionHandler()
+	txStore := txstore.NewTransactionStore()
 
 	// Test with invalid RPC URL
-	_, err := NewTransactionVerifier("invalid-url", txHandler, time.Minute)
+	_, err := NewTransactionVerifier("invalid-url", txStore, time.Minute)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Ethereum client")
 
@@ -25,13 +25,13 @@ func TestNewTransactionVerifier(t *testing.T) {
 }
 
 func TestTransactionVerifier_GetVerificationStats(t *testing.T) {
-	txHandler := txhandler.NewTransactionHandler()
+	txStore := txstore.NewTransactionStore()
 
 	// Add some test transactions
 	hash1 := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
 	hash2 := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
 
-	encryptedTx1 := &txhandler.EncryptedTransaction{
+	encryptedTx1 := &txstore.EncryptedTransaction{
 		Eon:                1,
 		MaxInclusionWindow: 10,
 		EncryptedTx:        []byte("encrypted1"),
@@ -40,7 +40,7 @@ func TestTransactionVerifier_GetVerificationStats(t *testing.T) {
 		DecryptionKey:      []byte("key1"),
 	}
 
-	encryptedTx2 := &txhandler.EncryptedTransaction{
+	encryptedTx2 := &txstore.EncryptedTransaction{
 		Eon:                2,
 		MaxInclusionWindow: 20,
 		EncryptedTx:        []byte("encrypted2"),
@@ -49,22 +49,22 @@ func TestTransactionVerifier_GetVerificationStats(t *testing.T) {
 		DecryptionKey:      []byte("key2"),
 	}
 
-	err := txHandler.StoreTransaction(hash1, encryptedTx1)
+	err := txStore.StoreTransaction(hash1, encryptedTx1)
 	require.NoError(t, err)
 
-	err = txHandler.StoreTransaction(hash2, encryptedTx2)
+	err = txStore.StoreTransaction(hash2, encryptedTx2)
 	require.NoError(t, err)
 
 	// Update one to decrypted status
-	err = txHandler.UpdateTransactionStatus(hash1, txhandler.StatusDecrypted)
+	err = txStore.UpdateTransactionStatus(hash1, txstore.StatusDecrypted)
 	require.NoError(t, err)
 
 	// Create verifier with mock RPC URL (won't actually connect in this test)
 	verifier := &TransactionVerifier{
-		txHandler: txHandler,
-		rpcURL:    "http://localhost:8545",
-		interval:  time.Minute,
-		ctx:       context.Background(),
+		txStore:  txStore,
+		rpcURL:   "http://localhost:8545",
+		interval: time.Minute,
+		ctx:      context.Background(),
 	}
 
 	stats := verifier.GetVerificationStats()
@@ -73,20 +73,20 @@ func TestTransactionVerifier_GetVerificationStats(t *testing.T) {
 	assert.Equal(t, "http://localhost:8545", stats["rpc_url"])
 	assert.Equal(t, "1m0s", stats["verification_interval"])
 
-	statusCounts, ok := stats["status_counts"].(map[txhandler.TransactionStatus]int)
+	statusCounts, ok := stats["status_counts"].(map[txstore.TransactionStatus]int)
 	require.True(t, ok)
-	assert.Equal(t, 1, statusCounts[txhandler.StatusInit])
-	assert.Equal(t, 1, statusCounts[txhandler.StatusDecrypted])
+	assert.Equal(t, 1, statusCounts[txstore.StatusInit])
+	assert.Equal(t, 1, statusCounts[txstore.StatusDecrypted])
 }
 
 func TestTransactionVerifier_Stop(t *testing.T) {
-	txHandler := txhandler.NewTransactionHandler()
+	txStore := txstore.NewTransactionStore()
 
 	verifier := &TransactionVerifier{
-		txHandler: txHandler,
-		rpcURL:    "http://localhost:8545",
-		interval:  time.Minute,
-		ctx:       context.Background(),
+		txStore:  txStore,
+		rpcURL:   "http://localhost:8545",
+		interval: time.Minute,
+		ctx:      context.Background(),
 	}
 
 	// Should not panic

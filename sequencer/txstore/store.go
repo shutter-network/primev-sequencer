@@ -1,4 +1,4 @@
-package txhandler
+package txstore
 
 import (
 	"fmt"
@@ -39,19 +39,19 @@ type StoredTransaction struct {
 	Retries        int
 }
 
-type TransactionHandler struct {
+type TransactionStore struct {
 	transactions map[common.Hash]*StoredTransaction
 	mutex        sync.RWMutex
 }
 
-func NewTransactionHandler() *TransactionHandler {
-	return &TransactionHandler{
+func NewTransactionStore() *TransactionStore {
+	return &TransactionStore{
 		transactions: make(map[common.Hash]*StoredTransaction),
 		mutex:        sync.RWMutex{},
 	}
 }
 
-func (th *TransactionHandler) StoreTransaction(hash common.Hash, encryptedTx *EncryptedTransaction) error {
+func (th *TransactionStore) StoreTransaction(hash common.Hash, encryptedTx *EncryptedTransaction) error {
 	th.mutex.Lock()
 	defer th.mutex.Unlock()
 
@@ -79,7 +79,7 @@ func (th *TransactionHandler) StoreTransaction(hash common.Hash, encryptedTx *En
 	return nil
 }
 
-func (th *TransactionHandler) UpdateTransactionStatus(hash common.Hash, status TransactionStatus) error {
+func (th *TransactionStore) UpdateTransactionStatus(hash common.Hash, status TransactionStatus) error {
 	th.mutex.Lock()
 	defer th.mutex.Unlock()
 
@@ -100,7 +100,7 @@ func (th *TransactionHandler) UpdateTransactionStatus(hash common.Hash, status T
 	return nil
 }
 
-func (th *TransactionHandler) UpdateCommittedTransaction(hash common.Hash, commitedBlock uint64) error {
+func (th *TransactionStore) UpdateCommittedTransaction(hash common.Hash, commitedBlock uint64) error {
 	th.mutex.Lock()
 	defer th.mutex.Unlock()
 
@@ -118,7 +118,7 @@ func (th *TransactionHandler) UpdateCommittedTransaction(hash common.Hash, commi
 	return nil
 }
 
-func (th *TransactionHandler) IncrementTransactionRetries(hash common.Hash) error {
+func (th *TransactionStore) IncrementTransactionRetries(hash common.Hash) error {
 	th.mutex.Lock()
 	defer th.mutex.Unlock()
 
@@ -130,7 +130,7 @@ func (th *TransactionHandler) IncrementTransactionRetries(hash common.Hash) erro
 	return nil
 }
 
-func (th *TransactionHandler) GetTransaction(hash common.Hash) (*StoredTransaction, error) {
+func (th *TransactionStore) GetTransaction(hash common.Hash) (*StoredTransaction, error) {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
@@ -142,7 +142,7 @@ func (th *TransactionHandler) GetTransaction(hash common.Hash) (*StoredTransacti
 	return transaction, nil
 }
 
-func (th *TransactionHandler) GetTransactionsByStatus(status TransactionStatus) []*StoredTransaction {
+func (th *TransactionStore) GetTransactionsByStatus(status TransactionStatus) []*StoredTransaction {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
@@ -156,7 +156,7 @@ func (th *TransactionHandler) GetTransactionsByStatus(status TransactionStatus) 
 	return result
 }
 
-func (th *TransactionHandler) GetAllTransactions() map[common.Hash]*StoredTransaction {
+func (th *TransactionStore) GetAllTransactions() map[common.Hash]*StoredTransaction {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
@@ -172,14 +172,14 @@ func (th *TransactionHandler) GetAllTransactions() map[common.Hash]*StoredTransa
 	return result
 }
 
-func (th *TransactionHandler) GetTransactionCount() int {
+func (th *TransactionStore) GetTransactionCount() int {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
 	return len(th.transactions)
 }
 
-func (th *TransactionHandler) GetStatusCounts() map[TransactionStatus]int {
+func (th *TransactionStore) GetStatusCounts() map[TransactionStatus]int {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
@@ -192,7 +192,7 @@ func (th *TransactionHandler) GetStatusCounts() map[TransactionStatus]int {
 }
 
 // GetTransactionsByIdentity returns all transactions that match the given identity
-func (th *TransactionHandler) GetTransactionsByIdentity(identity string) *StoredTransaction {
+func (th *TransactionStore) GetTransactionsByIdentity(identity string) *StoredTransaction {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
@@ -206,7 +206,7 @@ func (th *TransactionHandler) GetTransactionsByIdentity(identity string) *Stored
 }
 
 // GetTransactionsByIdentityAndStatus returns all transactions that match both identity and status
-func (th *TransactionHandler) GetTransactionsByIdentityAndStatus(identity string, status TransactionStatus) *StoredTransaction {
+func (th *TransactionStore) GetTransactionsByIdentityAndStatus(identity string, status TransactionStatus) *StoredTransaction {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 
@@ -219,7 +219,7 @@ func (th *TransactionHandler) GetTransactionsByIdentityAndStatus(identity string
 	return nil
 }
 
-func (th *TransactionHandler) GetTransactionsByCommitedBlock(commitedBlock uint64) []*StoredTransaction {
+func (th *TransactionStore) GetTransactionsByCommitedBlock(commitedBlock uint64) []*StoredTransaction {
 	th.mutex.RLock()
 	defer th.mutex.RUnlock()
 

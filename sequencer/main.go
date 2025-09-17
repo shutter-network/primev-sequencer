@@ -27,7 +27,7 @@ import (
 	"primev-poc/rpc"
 	"primev-poc/shutter"
 	"primev-poc/transaction_verifier"
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 )
 
 var (
@@ -50,7 +50,7 @@ type SequencerConfig struct {
 }
 
 type Sequencer struct {
-	txHandler  *txhandler.TransactionHandler
+	txStore    *txstore.TransactionStore
 	grpcAddr   string
 	instanceId uint64
 	p2p        *primevp2p.P2P
@@ -102,17 +102,17 @@ func runSequencer() error {
 		Str("grpc-addr", config.GrpcAddr).
 		Msg("Starting PrimeV sequencer")
 
-	txHandler := txhandler.NewTransactionHandler()
+	txStore := txstore.NewTransactionStore()
 
 	// Start Transaction Verifier
-	verifier, err := transaction_verifier.NewTransactionVerifier(config.UpstreamRPCURL, txHandler, config.VerificationInterval)
+	verifier, err := transaction_verifier.NewTransactionVerifier(config.UpstreamRPCURL, txStore, config.VerificationInterval)
 	if err != nil {
 		return fmt.Errorf("failed to create transaction verifier: %w", err)
 	}
 
-	restAPI := api.NewRestAPI(txHandler, config.ApiPort)
+	restAPI := api.NewRestAPI(txStore, config.ApiPort)
 
-	p2p := primevp2p.NewP2P(&config.p2pConfig, txHandler, config.bidderNodeAddress)
+	p2p := primevp2p.NewP2P(&config.p2pConfig, txStore, config.bidderNodeAddress)
 
 	rpcConfig := &rpc.Config{
 		Port:                    config.RpcPort,
@@ -122,13 +122,13 @@ func runSequencer() error {
 		BidderNodeAddress:       config.bidderNodeAddress,
 	}
 
-	rpcServer, err := rpc.NewRPCServer(rpcConfig, txHandler, MaxInclusionWindow)
+	rpcServer, err := rpc.NewRPCServer(rpcConfig, txStore, MaxInclusionWindow)
 	if err != nil {
 		return fmt.Errorf("failed to create RPC server: %w", err)
 	}
 
 	sequencer := &Sequencer{
-		txHandler:  txHandler,
+		txStore:    txStore,
 		grpcAddr:   config.GrpcAddr,
 		instanceId: config.InstanceId,
 		p2p:        p2p,
@@ -154,7 +154,7 @@ func runSequencer() error {
 func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 	zlog.Info().Msg("Starting sequencer core module")
 
-	bidManager := bidder.NewBidManager(s.txHandler)
+	bidManager := bidder.NewBidManager(s.txStore)
 
 	go func() {
 		zlog.Info().Msg("Sequencer core module running")
@@ -168,8 +168,8 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 		for {
 			select {
 			case <-statusTicker.C:
-				count := s.txHandler.GetTransactionCount()
-				statusCounts := s.txHandler.GetStatusCounts()
+				count := s.txStore.GetTransactionCount()
+				statusCounts := s.txStore.GetStatusCounts()
 				zlog.Info().
 					Int("total_transactions", count).
 					Interface("status_counts", statusCounts).
@@ -204,7 +204,7 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 					if err != nil || len(commitments) == 0 {
 						zlog.Error().Err(err).Msg("Failed to submit bid to gRPC server")
 						for _, txHash := range txHashes {
-							err = s.txHandler.UpdateTransactionStatus(txHash, txhandler.StatusInit)
+							err = s.txStore.UpdateTransactionStatus(txHash, txstore.StatusInit)
 							if err != nil {
 								zlog.Error().Err(err).Msg("Failed to update transaction status")
 								continue

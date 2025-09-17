@@ -3,7 +3,7 @@ package p2p
 import (
 	"context"
 	"log"
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2p"
@@ -13,20 +13,20 @@ import (
 type P2P struct {
 	config            *p2p.Config
 	service           *p2p.P2PMessaging
-	txHandler         *txhandler.TransactionHandler
+	txStore           *txstore.TransactionStore
 	bidderNodeAddress string
 }
 
-func NewP2P(config *p2p.Config, txHandler *txhandler.TransactionHandler, bidderNodeAddress string) *P2P {
+func NewP2P(config *p2p.Config, txStore *txstore.TransactionStore, bidderNodeAddress string) *P2P {
 	service, err := p2p.New(config)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &P2P{config: config, service: service, txHandler: txHandler, bidderNodeAddress: bidderNodeAddress}
+	return &P2P{config: config, service: service, txStore: txStore, bidderNodeAddress: bidderNodeAddress}
 }
 
 func (p *P2P) Start(ctx context.Context, runner service.Runner) error {
-	msgHandler := NewDecryptionKeysMsgHandler(p.txHandler, &HandlerConfig{BidderNodeAddress: p.bidderNodeAddress})
+	msgHandler := NewDecryptionKeysMsgHandler(p.txStore, &HandlerConfig{BidderNodeAddress: p.bidderNodeAddress})
 	p.service.AddMessageHandler(msgHandler)
 	return runner.StartService(p.service)
 }

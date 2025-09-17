@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"primev-poc/txhandler"
+	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog/log"
@@ -18,15 +18,15 @@ import (
 
 // RestAPI represents the REST API server
 type RestAPI struct {
-	txHandler *txhandler.TransactionHandler
-	apiPort   string
+	txStore *txstore.TransactionStore
+	apiPort string
 }
 
 // NewRestAPI creates a new REST API instance
-func NewRestAPI(txHandler *txhandler.TransactionHandler, apiPort string) *RestAPI {
+func NewRestAPI(txStore *txstore.TransactionStore, apiPort string) *RestAPI {
 	return &RestAPI{
-		txHandler: txHandler,
-		apiPort:   apiPort,
+		txStore: txStore,
+		apiPort: apiPort,
 	}
 }
 
@@ -74,7 +74,7 @@ func (api *RestAPI) GetDecryptedTx(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get transaction from handler
-	transaction, err := api.txHandler.GetTransaction(txHash)
+	transaction, err := api.txStore.GetTransaction(txHash)
 	if err != nil {
 		log.Error().Err(err).Str("tx_hash", txHashStr).Msg("Failed to get transaction")
 		api.sendErrorResponse(w, "Transaction not found: "+err.Error(), http.StatusNotFound)
