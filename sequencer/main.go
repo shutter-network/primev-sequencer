@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -98,20 +97,7 @@ func runSequencer() error {
 	}
 	defer verifier.Stop()
 
-	restAPI := api.NewRestAPI(txHandler)
-	apiMux := restAPI.SetupRoutes()
-	apiServer := &http.Server{
-		Addr:    ":" + config.ApiPort,
-		Handler: apiMux,
-	}
-
-	// Start API server in a goroutine
-	go func() {
-		zlog.Info().Str("port", config.ApiPort).Msg("Starting REST API server")
-		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			zlog.Error().Err(err).Msg("REST API server error")
-		}
-	}()
+	restAPI := api.NewRestAPI(txHandler, config.ApiPort)
 
 	p2p := primevp2p.NewP2P(&config.p2pConfig, txHandler, config.bidderNodeAddress)
 
@@ -134,7 +120,7 @@ func runSequencer() error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service.Run(ctx, p2p, rpcServer)
+	service.Run(ctx, p2p, rpcServer, restAPI)
 
 	zlog.Info().Msg("All modules started successfully")
 
@@ -144,15 +130,6 @@ func runSequencer() error {
 	cancel()
 
 	zlog.Info().Msg("Shutting down all modules...")
-
-	// Gracefully shutdown API server
-	apiCtx, apiCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer apiCancel()
-	if err := apiServer.Shutdown(apiCtx); err != nil {
-		zlog.Error().Err(err).Msg("API server shutdown error")
-	} else {
-		zlog.Info().Msg("API server stopped")
-	}
 
 	zlog.Info().Msg("All modules stopped")
 	return nil

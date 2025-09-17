@@ -1,27 +1,32 @@
 package api
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"primev-poc/txhandler"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
 // RestAPI represents the REST API server
 type RestAPI struct {
 	txHandler *txhandler.TransactionHandler
+	apiPort   string
 }
 
 // NewRestAPI creates a new REST API instance
-func NewRestAPI(txHandler *txhandler.TransactionHandler) *RestAPI {
+func NewRestAPI(txHandler *txhandler.TransactionHandler, apiPort string) *RestAPI {
 	return &RestAPI{
 		txHandler: txHandler,
+		apiPort:   apiPort,
 	}
 }
 
@@ -134,12 +139,25 @@ func (api *RestAPI) sendErrorResponse(w http.ResponseWriter, message string, sta
 	json.NewEncoder(w).Encode(response)
 }
 
-// SetupRoutes sets up the REST API routes
-func (api *RestAPI) SetupRoutes() *http.ServeMux {
+// Start starts the REST API server
+func (api *RestAPI) Start(ctx context.Context, runner service.Runner) error {
 	mux := http.NewServeMux()
 
 	// Register the get_decrypted_tx endpoint with path parameter
 	mux.HandleFunc("/get_decrypted_tx/", api.GetDecryptedTx)
 
-	return mux
+	httpServer := &http.Server{
+		Addr:    ":" + api.apiPort,
+		Handler: mux,
+	}
+
+	runner.Go(httpServer.ListenAndServe)
+
+	runner.Go(func() error {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		return httpServer.Shutdown(shutdownCtx)
+	})
+	return nil
 }
