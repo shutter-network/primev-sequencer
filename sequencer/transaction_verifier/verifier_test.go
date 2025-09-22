@@ -16,7 +16,7 @@ func TestNewTransactionVerifier(t *testing.T) {
 	txStore := txstore.NewTransactionStore()
 
 	// Test with invalid RPC URL
-	_, err := NewTransactionVerifier("invalid-url", txStore, time.Minute)
+	_, err := NewTransactionVerifier("invalid-url", txStore, time.Minute, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Ethereum client")
 

@@ -118,12 +118,12 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txst
 	bidOptions := make([]*bidderapi.BidOption, 0)
 
 	for _, transaction := range transactions {
-		// txHashes = append(txHashes, common.Bytes2Hex(transaction.EncryptedTx.TxHash))
-		rawTransactions = append(rawTransactions, hex.EncodeToString(transaction.EncryptedTx.EncryptedTx))
+		txHashes = append(txHashes, common.Bytes2Hex(transaction.EncryptedTx.TxHash))
 		bidOptions = append(bidOptions, &bidderapi.BidOption{
 			Opt: &bidderapi.BidOption_ShutterisedBidOption{
 				ShutterisedBidOption: &bidderapi.ShutterisedBidOption{
-					IdentityPrefix: hex.EncodeToString(transaction.EncryptedTx.TxHash),
+					IdentityPrefix: transaction.EncryptedTx.IdentityPrefix,
+					EncryptedTx:    hex.EncodeToString(transaction.EncryptedTx.EncryptedTx),
 				},
 			},
 		})

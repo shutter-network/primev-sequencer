@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"primev-poc/shutter"
 	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -21,10 +22,11 @@ type TransactionVerifier struct {
 	interval  time.Duration
 	ctx       context.Context
 	cancel    context.CancelFunc
+	encryptor *shutter.Encryptor
 }
 
 // NewTransactionVerifier creates a new transaction verifier instance
-func NewTransactionVerifier(rpcURL string, txStore *txstore.TransactionStore, interval time.Duration) (*TransactionVerifier, error) {
+func NewTransactionVerifier(rpcURL string, txStore *txstore.TransactionStore, interval time.Duration, encryptor *shutter.Encryptor) (*TransactionVerifier, error) {
 	// Create Ethereum client connection
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
@@ -40,6 +42,7 @@ func NewTransactionVerifier(rpcURL string, txStore *txstore.TransactionStore, in
 		interval:  interval,
 		ctx:       ctx,
 		cancel:    cancel,
+		encryptor: encryptor,
 	}, nil
 }
 
@@ -124,36 +127,20 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 					Msg("Transaction verified on blockchain, status updated to finalised")
 			}
 		} else {
-			err := tv.txStore.IncrementTransactionRetries(txHash)
+			encryptedTx, _, err := tv.encryptor.EncryptTransaction(tx.EncryptedTx.RawTx, txHash)
+			if err != nil {
+				log.Error().
+					Err(err).
+					Str("tx_hash", txHash.Hex()).
+					Msg("Failed to encrypt transaction")
+				continue
+			}
+			err = tv.txStore.UpdateRetriedTx(txHash, encryptedTx)
 			if err != nil {
 				log.Error().
 					Err(err).
 					Str("tx_hash", txHash.Hex()).
 					Msg("Failed to increment transaction retries")
-			}
-			if tx.Retries >= 3 {
-				log.Error().
-					Str("tx_hash", txHash.Hex()).
-					Msg("Transaction not found on blockchain after max retries, status set to blocked")
-				err = tv.txStore.UpdateTransactionStatus(txHash, txstore.StatusBlocked)
-				if err != nil {
-					log.Error().
-						Err(err).
-						Str("tx_hash", txHash.Hex()).
-						Msg("Failed to update transaction status to blocked")
-				}
-				continue
-			}
-			err = tv.txStore.UpdateTransactionStatus(txHash, txstore.StatusInit)
-			if err != nil {
-				log.Error().
-					Err(err).
-					Str("tx_hash", txHash.Hex()).
-					Msg("Failed to update transaction status to init")
-			} else {
-				log.Info().
-					Str("tx_hash", txHash.Hex()).
-					Msg("Transaction not found on blockchain, status reset to init")
 			}
 		}
 	}

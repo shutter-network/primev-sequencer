@@ -13,17 +13,12 @@ import (
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/p2pmsg"
 )
 
-type HandlerConfig struct {
-	BidderNodeAddress string
-}
-
 type DecryptionKeysMsgHandler struct {
 	txStore *txstore.TransactionStore
-	config  *HandlerConfig
 }
 
-func NewDecryptionKeysMsgHandler(txStore *txstore.TransactionStore, config *HandlerConfig) *DecryptionKeysMsgHandler {
-	return &DecryptionKeysMsgHandler{txStore: txStore, config: config}
+func NewDecryptionKeysMsgHandler(txStore *txstore.TransactionStore) *DecryptionKeysMsgHandler {
+	return &DecryptionKeysMsgHandler{txStore: txStore}
 }
 
 func (mh *DecryptionKeysMsgHandler) MessagePrototypes() []p2pmsg.Message {
@@ -59,6 +54,7 @@ func (mh *DecryptionKeysMsgHandler) HandleMessage(ctx context.Context, msg p2pms
 		if tx == nil {
 			continue
 		}
+
 		tx.EncryptedTx.DecryptionKey = key.Key
 		err := mh.txStore.UpdateTransactionStatus(common.BytesToHash(tx.EncryptedTx.TxHash), txstore.StatusDecrypted)
 		if err != nil {

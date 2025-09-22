@@ -28,7 +28,9 @@ type EncryptedTransaction struct {
 	EncryptedTx        []byte
 	TxHash             []byte
 	Identity           string
+	IdentityPrefix     string
 	DecryptionKey      []byte
+	RawTx              string
 }
 
 type StoredTransaction struct {
@@ -79,6 +81,26 @@ func (th *TransactionStore) StoreTransaction(hash common.Hash, encryptedTx *Encr
 	return nil
 }
 
+func (th *TransactionStore) UpdateRetriedTx(hash common.Hash, encryptedTx *EncryptedTransaction) error {
+	th.mutex.Lock()
+	defer th.mutex.Unlock()
+
+	transaction, exists := th.transactions[hash]
+	if !exists {
+		return fmt.Errorf("transaction %s not found", hash.Hex())
+	}
+	transaction.EncryptedTx.EncryptedTx = encryptedTx.EncryptedTx
+	transaction.EncryptedTx.Identity = encryptedTx.Identity
+	transaction.EncryptedTx.IdentityPrefix = encryptedTx.IdentityPrefix
+	transaction.Retries++
+	if transaction.Retries >= 3 {
+		transaction.Status = StatusBlocked
+	} else {
+		transaction.Status = StatusInit
+	}
+	return nil
+}
+
 func (th *TransactionStore) UpdateTransactionStatus(hash common.Hash, status TransactionStatus) error {
 	th.mutex.Lock()
 	defer th.mutex.Unlock()
@@ -109,24 +131,8 @@ func (th *TransactionStore) UpdateCommittedTransaction(hash common.Hash, commite
 		return fmt.Errorf("transaction %s not found", hash.Hex())
 	}
 
-	if transaction.EncryptedTx.DecryptionKey != nil {
-		transaction.Status = StatusDecrypted
-	} else {
-		transaction.Status = StatusCommitted
-	}
+	transaction.Status = StatusCommitted
 	transaction.CommitedBlock = commitedBlock
-	return nil
-}
-
-func (th *TransactionStore) IncrementTransactionRetries(hash common.Hash) error {
-	th.mutex.Lock()
-	defer th.mutex.Unlock()
-
-	transaction, exists := th.transactions[hash]
-	if !exists {
-		return fmt.Errorf("transaction %s not found", hash.Hex())
-	}
-	transaction.Retries++
 	return nil
 }
 

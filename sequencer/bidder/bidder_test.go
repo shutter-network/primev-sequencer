@@ -7,6 +7,7 @@ import (
 	"primev-poc/txstore"
 
 	"github.com/ethereum/go-ethereum/common"
+	bidderapi "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,12 +49,12 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 		assert.Equal(t, int64(500), bid.BlockNumber)
 		assert.Equal(t, "30000000000", bid.Amount)
 		assert.Equal(t, "100000000000000000", bid.SlashAmount)
-		assert.Len(t, bid.RawTransactions, 1)
+		assert.Len(t, bid.TxHashes, 1)
+		assert.Len(t, bid.BidOptions.Options, 1)
 		assert.Empty(t, bid.RevertingTxHashes)
 
-		// Verify raw transaction is hex encoded
-		expectedRawTx := "0x" + hex.EncodeToString(encryptedTx.EncryptedTx)
-		assert.Equal(t, expectedRawTx[2:], bid.RawTransactions[0])
+		assert.Equal(t, bid.BidOptions.Options[0].Opt.(*bidderapi.BidOption_ShutterisedBidOption).ShutterisedBidOption.EncryptedTx, hex.EncodeToString(encryptedTx.EncryptedTx))
+		assert.Equal(t, bid.BidOptions.Options[0].Opt.(*bidderapi.BidOption_ShutterisedBidOption).ShutterisedBidOption.IdentityPrefix, hex.EncodeToString(encryptedTx.TxHash))
 
 		// Now the transaction status should be properly updated since the hash matches
 		storedTx, err := txStore.GetTransaction(hash1)
@@ -92,7 +93,8 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 
 		// Verify bid contains both transactions
 		assert.Equal(t, int64(1500), bid.BlockNumber)
-		assert.Len(t, bid.RawTransactions, 2)
+		assert.Len(t, bid.TxHashes, 2)
+		assert.Len(t, bid.BidOptions.Options, 2)
 
 		// Now transaction statuses should be properly updated since the hashes match
 		for _, hash := range hashes {
@@ -154,7 +156,8 @@ func TestBidManager_CreateBidFromInitTransactions(t *testing.T) {
 
 		// Verify bid only contains transactions within max inclusion window
 		expectedTxCount := 2 // Only transactions with max inclusion window >= 4000
-		assert.Len(t, bid.RawTransactions, expectedTxCount)
+		assert.Len(t, bid.TxHashes, expectedTxCount)
+		assert.Len(t, bid.BidOptions.Options, expectedTxCount)
 
 		// Now transaction statuses should be properly updated since the hashes match
 		for _, data := range testData {

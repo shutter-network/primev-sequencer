@@ -55,7 +55,7 @@ type RPCError struct {
 
 func NewRPCServer(config *Config, txStore *txstore.TransactionStore, maxInclusionWindow uint64) (*RPCServer, error) {
 	// Initialize the shutter package with configuration
-	encryptor := shutter.Initialize(config.UpstreamRPCURL, config.KeyperSetManagerAddress, config.KeyBroadcastAddress, maxInclusionWindow)
+	encryptor := shutter.Initialize(config.UpstreamRPCURL, config.KeyperSetManagerAddress, config.KeyBroadcastAddress, maxInclusionWindow, config.BidderNodeAddress)
 
 	return &RPCServer{
 		config:     config,
@@ -187,7 +187,7 @@ func (s *RPCServer) handleSendRawTransaction(w http.ResponseWriter, req *JSONRPC
 		return
 	}
 
-	encryptedTx, _, err := s.Encryptor.EncryptTransaction(rawTx, txHash, s.config.BidderNodeAddress)
+	encryptedTx, _, err := s.Encryptor.EncryptTransaction(rawTx, txHash)
 	if err != nil {
 		log.Error().
 			Err(err).

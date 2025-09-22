@@ -23,19 +23,20 @@ type Encryptor struct {
 	KeyperSetManagerAddress string
 	KeyBroadcastAddress     string
 	MaxInclusionWindow      uint64
+	BidderNodeAddress       string
 }
 
-func Initialize(rpcURL string, keyperSetManagerAddress string, keyBroadcastAddress string, maxInclusionWindow uint64) *Encryptor {
+func Initialize(rpcURL string, keyperSetManagerAddress string, keyBroadcastAddress string, maxInclusionWindow uint64, bidderNodeAddress string) *Encryptor {
 	return &Encryptor{
 		EthereumRPCURL:          rpcURL,
 		KeyperSetManagerAddress: keyperSetManagerAddress,
 		KeyBroadcastAddress:     keyBroadcastAddress,
 		MaxInclusionWindow:      maxInclusionWindow,
+		BidderNodeAddress:       bidderNodeAddress,
 	}
 }
 
-func (e *Encryptor) EncryptTransaction(rawTx string, txHash common.Hash, bidderNodeAddress string) (*txstore.EncryptedTransaction, common.Hash, error) {
-
+func (e *Encryptor) EncryptTransaction(rawTx string, txHash common.Hash) (*txstore.EncryptedTransaction, common.Hash, error) {
 	currentBlockNum, err := e.GetCurrentBlockNumber()
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to get current block number: %w", err)
@@ -47,7 +48,6 @@ func (e *Encryptor) EncryptTransaction(rawTx string, txHash common.Hash, bidderN
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to get eon for scheduled block: %w", err)
 	}
-
 	eonPublicKey, err := e.fetchEonKeyForEon(eonID)
 	if err != nil {
 		return nil, common.Hash{}, fmt.Errorf("failed to fetch eon public key for eon %d: %w", eonID, err)
@@ -58,7 +58,12 @@ func (e *Encryptor) EncryptTransaction(rawTx string, txHash common.Hash, bidderN
 		return nil, common.Hash{}, fmt.Errorf("failed to decode raw transaction: %w", err)
 	}
 
-	identity := utils.GetIdentityPrefix(txHash, bidderNodeAddress)
+	// Generate 32 random bytes for identity prefix
+	identityPrefix := make([]byte, 32)
+	if _, err := rand.Read(identityPrefix); err != nil {
+		return nil, common.Hash{}, fmt.Errorf("failed to generate random identity prefix: %w", err)
+	}
+	identity := utils.GetIdentity(identityPrefix, e.BidderNodeAddress)
 
 	sigmaBlock, err := shcrypto.RandomSigma(rand.Reader)
 	if err != nil {
@@ -78,6 +83,8 @@ func (e *Encryptor) EncryptTransaction(rawTx string, txHash common.Hash, bidderN
 		EncryptedTx:        encryptedData,
 		TxHash:             txHash.Bytes(),
 		Identity:           hex.EncodeToString(identity),
+		IdentityPrefix:     hex.EncodeToString(identityPrefix),
+		RawTx:              rawTx,
 	}
 
 	log.Info().

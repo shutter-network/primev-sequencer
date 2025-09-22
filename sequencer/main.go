@@ -103,15 +103,9 @@ func runSequencer() error {
 
 	txStore := txstore.NewTransactionStore()
 
-	// Start Transaction Verifier
-	verifier, err := transaction_verifier.NewTransactionVerifier(config.UpstreamRPCURL, txStore, config.VerificationInterval)
-	if err != nil {
-		return fmt.Errorf("failed to create transaction verifier: %w", err)
-	}
-
 	restAPI := api.NewRestAPI(txStore, config.ApiPort)
 
-	p2p := primevp2p.NewP2P(&config.p2pConfig, txStore, config.bidderNodeAddress)
+	p2p := primevp2p.NewP2P(&config.p2pConfig, txStore)
 
 	rpcConfig := &rpc.Config{
 		Port:                    config.RpcPort,
@@ -124,6 +118,11 @@ func runSequencer() error {
 	rpcServer, err := rpc.NewRPCServer(rpcConfig, txStore, MaxInclusionWindow)
 	if err != nil {
 		return fmt.Errorf("failed to create RPC server: %w", err)
+	}
+
+	verifier, err := transaction_verifier.NewTransactionVerifier(config.UpstreamRPCURL, txStore, config.VerificationInterval, rpcServer.Encryptor)
+	if err != nil {
+		return fmt.Errorf("failed to create transaction verifier: %w", err)
 	}
 
 	sequencer := &Sequencer{

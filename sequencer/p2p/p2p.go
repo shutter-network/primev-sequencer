@@ -11,22 +11,21 @@ import (
 )
 
 type P2P struct {
-	config            *p2p.Config
-	service           *p2p.P2PMessaging
-	txStore           *txstore.TransactionStore
-	bidderNodeAddress string
+	config  *p2p.Config
+	service *p2p.P2PMessaging
+	txStore *txstore.TransactionStore
 }
 
-func NewP2P(config *p2p.Config, txStore *txstore.TransactionStore, bidderNodeAddress string) *P2P {
+func NewP2P(config *p2p.Config, txStore *txstore.TransactionStore) *P2P {
 	service, err := p2p.New(config)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &P2P{config: config, service: service, txStore: txStore, bidderNodeAddress: bidderNodeAddress}
+	return &P2P{config: config, service: service, txStore: txStore}
 }
 
 func (p *P2P) Start(ctx context.Context, runner service.Runner) error {
-	decryptionKeysMsgHandler := NewDecryptionKeysMsgHandler(p.txStore, &HandlerConfig{BidderNodeAddress: p.bidderNodeAddress})
+	decryptionKeysMsgHandler := NewDecryptionKeysMsgHandler(p.txStore)
 	commitmentMsgHandler := NewCommitmentMsgHandler()
 
 	p.service.AddMessageHandler(decryptionKeysMsgHandler)

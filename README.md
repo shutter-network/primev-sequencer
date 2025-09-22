@@ -63,8 +63,9 @@ init → bidsubmitted → committed → decrypted → finalised
 - Comprehensive transaction metadata tracking
 
 **Identity Management**:
-- **Unique Identity Creation**: Each transaction gets a unique identity created by hashing the transaction hash with the bidder node address
-- **Deterministic Generation**: `Identity = Keccak256(txHash + bidderNodeAddress)`
+- **Unique Identity Creation**: Each transaction gets a unique identity created by hashing 32 random bytes with the bidder node address
+- **Cryptographic Generation**: `Identity = Keccak256(Random32Bytes + BidderNodeAddress)`
+- **Random Prefix**: Uses cryptographically secure random bytes to ensure unpredictability
 - **Keyper Verification**: Keypers can verify identities by extracting the bidder node address from bid signatures in commitments
 - **No Re-registration**: Unique identities prevent duplicate processing and ensure cryptographic integrity
 
@@ -94,14 +95,14 @@ init → bidsubmitted → committed → decrypted → finalised
 5. Encrypt transaction data using threshold cryptography
 
 **Identity Generation & Verification**:
-- **Cryptographic Identity**: `Identity = Keccak256(TransactionHash || BidderNodeAddress)`
-- **Unique per Transaction**: Each transaction gets a unique identity preventing replay attacks
+- **Cryptographic Identity**: `Identity = Keccak256(Random32Bytes || BidderNodeAddress)`
+- **Random Identity Prefix**: Each transaction uses 32 cryptographically secure random bytes as identity prefix
 - **Bidder Binding**: Identity is cryptographically bound to the bidder who submitted the transaction
 - **Keyper Verification**: Keypers verify identities by:
   1. Extracting bidder address from bid signature in commitment message
-  2. Recomputing identity using transaction hash and extracted bidder address
+  2. Recomputing identity using the random prefix from encryption and extracted bidder address
   3. Comparing computed identity with the one used for encryption
-- **No Re-registration Protection**: Same identity cannot be used twice, preventing duplicate decryption requests
+- **Unpredictable Identities**: Random prefixes make identities unpredictable and prevent pre-computation attacks
 
 ### 💰 Bid Manager (`bidder/`)
 
