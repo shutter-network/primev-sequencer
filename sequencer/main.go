@@ -164,6 +164,7 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 		defer bidTicker.Stop()
 
 		for {
+			var cancelFunc context.CancelFunc
 			select {
 			case <-statusTicker.C:
 				count := s.txStore.GetTransactionCount()
@@ -218,7 +219,8 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 							zlog.Error().Err(err).Msg("Failed to get identities")
 							continue
 						}
-						ctx, _ := context.WithTimeout(context.Background(), 2*time.Minute)
+						ctx, cancelFunc = context.WithTimeout(context.Background(), 2*time.Minute)
+
 						err = s.p2p.SendMessage(ctx, &p2pmsg.Commitment{
 							InstanceId:           s.instanceId,
 							TxHashes:             c.GetTxHashes(),
@@ -248,6 +250,9 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 							Msg("Commitment received and transactions marked as committed")
 					}
 				}
+			case <-ctx.Done():
+				cancelFunc()
+				return
 			}
 		}
 	}()
@@ -277,7 +282,7 @@ func getIdentityPrefixes(bidOptions *bidderapiv1.BidOptions) ([]string, error) {
 	for _, option := range bidOptions.Options {
 		switch option.GetOpt().(type) {
 		case *bidderapiv1.BidOption_ShutterisedBidOption:
-			identities = append(identities, option.GetShutterisedBidOption().IdentityPrefix)
+			identities = append(identities, strings.TrimPrefix(option.GetShutterisedBidOption().IdentityPrefix, "0x"))
 		default:
 			return nil, fmt.Errorf("invalid bid option")
 		}
@@ -314,6 +319,9 @@ func readFromEnv() (*SequencerConfig, error) {
 	}
 	if instanceId == "" {
 		return nil, fmt.Errorf("INSTANCE_ID environment variable is required")
+	}
+	if bidderNodeAddress == "" {
+		return nil, fmt.Errorf("BIDDER_NODE_ADDRESS environment variable is required")
 	}
 	instanceIdUint64, err := strconv.ParseUint(instanceId, 10, 64)
 	if err != nil {

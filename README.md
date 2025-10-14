@@ -52,8 +52,8 @@ The PrimeV sequencer is a multi-module system that handles encrypted transaction
 **Transaction Lifecycle**:
 ```
 init → bidsubmitted → committed → decrypted → finalised
-  ↑                                              ↓
-  └──────────────── blocked ←────────────────────┘
+                                            ↓
+                              blocked ←─────┘
 ```
 
 **Key Features**:
