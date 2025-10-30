@@ -124,6 +124,7 @@ func (bm *BidManager) createBidForBlock(blockNumber uint64, transactions []*txst
 				ShutterisedBidOption: &bidderapi.ShutterisedBidOption{
 					IdentityPrefix: transaction.EncryptedTx.IdentityPrefix,
 					EncryptedTx:    hex.EncodeToString(transaction.EncryptedTx.EncryptedTx),
+					EonId:          int64(transaction.EncryptedTx.Eon),
 				},
 			},
 		})

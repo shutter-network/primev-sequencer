@@ -126,22 +126,6 @@ func (tv *TransactionVerifier) verifyDecryptedTransactions() {
 					Str("tx_hash", txHash.Hex()).
 					Msg("Transaction verified on blockchain, status updated to finalised")
 			}
-		} else {
-			encryptedTx, _, err := tv.encryptor.EncryptTransaction(tx.EncryptedTx.RawTx, txHash)
-			if err != nil {
-				log.Error().
-					Err(err).
-					Str("tx_hash", txHash.Hex()).
-					Msg("Failed to encrypt transaction")
-				continue
-			}
-			err = tv.txStore.UpdateRetriedTx(txHash, encryptedTx)
-			if err != nil {
-				log.Error().
-					Err(err).
-					Str("tx_hash", txHash.Hex()).
-					Msg("Failed to increment transaction retries")
-			}
 		}
 	}
 }
