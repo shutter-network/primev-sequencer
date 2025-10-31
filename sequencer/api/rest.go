@@ -190,8 +190,8 @@ func (api *RestAPI) sendErrorResponse(w http.ResponseWriter, message string, sta
 func (api *RestAPI) Start(ctx context.Context, runner service.Runner) error {
 	mux := http.NewServeMux()
 
-	// Register the get_decrypted_tx endpoint with path parameter
-	mux.HandleFunc("/get_decrypted_tx/", api.GetDecryptedTx)
+	// Register the decrypted_tx endpoint with path parameter
+	mux.HandleFunc("/decrypted_tx/", api.GetDecryptedTx)
 
 	httpServer := &http.Server{
 		Addr:    ":" + api.apiPort,
