@@ -1,3 +1,5 @@
 .env
 primev-sequencer
 test_client
+keystore
+bidder-data

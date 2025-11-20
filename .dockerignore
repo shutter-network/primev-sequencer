@@ -1,0 +1,21 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Test client (not needed for sequencer build)
+test_client/
+
+# Environment files
+.env*
+
+# Docker files
+Dockerfile
+docker-compose.yml
+docker-compose.env.example
+
+# Build artifacts
+sequencer/primev-sequencer

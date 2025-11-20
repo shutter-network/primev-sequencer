@@ -1,0 +1,66 @@
+services:
+  sequencer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"   # RPC port
+      - "8080:8080"   # REST API port
+      - "23003:23003" # P2P port
+    environment:
+      # RPC server configuration
+      - RPC_PORT=8545
+      - UPSTREAM_RPC_URL=${UPSTREAM_RPC_URL:-https://0xrpc.io/hoodi}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+
+      # REST API server configuration
+      - API_PORT=8080
+
+      # Transaction Verifier configuration
+      - VERIFICATION_INTERVAL=${VERIFICATION_INTERVAL:-10s}
+
+      # Required configuration
+      - GRPC_ADDR=bidder:13524
+      - KEYPER_SET_MANAGER_ADDRESS=0xea6E2990fddf352ea76A15f25d06B65b8BA42771
+      - KEY_BROADCAST_ADDRESS=0xd58fb530f6fe32Bbda24C284d36710bAa2b47232
+      - BIDDER_NODE_ADDRESS=${BIDDER_NODE_ADDRESS:-0x1234567890123456789012345678901234567890}
+
+      # P2P configuration
+      - INSTANCE_ID=42
+      - P2P_KEY=${P2P_KEY:-your_p2p_private_key_here}
+      - P2P_BOOTSTRAP_ADDRESSES=/ip4/46.101.186.142/tcp/2001/p2p/12D3KooWCz6iHZAJ6ocH2xnSJKdLeTgxg2VmnnAY8f9SM2C8e7uD
+      - P2P_PORT=23003
+      - P2P_ENVIRONMENT=0
+      - P2P_DISCOVERY_NAMESPACE=primev-poc
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - bidder
+
+  bidder:
+    build:
+      context: ./bidder
+    ports:
+      - "13522:13522" # p2p
+      - "13523:13523" # http
+      - "13524:13524" # rpc
+    environment:
+      - DOMAIN=${DOMAIN:-testnet.mev-commit.xyz}
+      - RPC_URL=${SETTLEMENT_RPC_URL:-https://chainrpc.testnet.mev-commit.xyz/}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FMT=${LOG_FMT:-text}
+      - AUTO_DEPOSIT_AMOUNT=${AUTO_DEPOSIT_AMOUNT:-1000000000000000000}
+    volumes:
+      - ./bidder-data:/root/.mev-commit
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$(curl -f -s http://localhost:13523/health | tr -d '\\r\\n')\" = \"ok\" ]"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped

@@ -284,3 +284,89 @@ A separate test client is provided in `test_client/` for transaction sending:
 cd test_client
 ./run_test.sh
 ```
+
+## 🐳 Docker Setup
+
+### Using Docker Compose (Recommended)
+
+1. **Environment Configuration**
+   ```bash
+   # Copy the Docker environment template
+   cp docker-compose.env.example .env
+
+   # Edit configuration with your values
+   nano .env
+   ```
+
+2. **Build and Run**
+   ```bash
+   # Build and start the sequencer
+   docker compose up --build
+
+   # Or run in background
+   docker compose up -d --build
+   ```
+
+3. **View Logs**
+   ```bash
+   # View logs
+   docker compose logs -f sequencer
+
+   # Stop the service
+   docker compose down
+   ```
+
+### Manual Docker Commands
+
+If you prefer to use Docker directly:
+
+```bash
+# Build the image
+docker build -t primev-sequencer .
+
+# Run the sequencer container with configurable environment variables
+docker run -p 8545:8545 -p 8080:8080 -p 23003:23003 \
+  --network primev-poc_default \
+  -e UPSTREAM_RPC_URL="https://0xrpc.io/hoodi" \
+  -e LOG_LEVEL="info" \
+  -e VERIFICATION_INTERVAL="10s" \
+  -e BIDDER_NODE_ADDRESS="0x1234567890123456789012345678901234567890" \
+  -e P2P_KEY="your_p2p_private_key_here" \
+  primev-sequencer
+
+# Note: For a complete setup, you'll also need to run the bidder container manually
+# and ensure proper networking between containers. Docker Compose is recommended.
+```
+
+### Configurable Environment Variables
+
+For production deployment, you can configure these environment variables (defaults shown in parentheses):
+
+**Sequencer Service:**
+- `UPSTREAM_RPC_URL`: Ethereum RPC endpoint for transaction verification (https://0xrpc.io/hoodi)
+- `LOG_LEVEL`: Logging level (info)
+- `VERIFICATION_INTERVAL`: How often to check transaction status on blockchain (10s)
+- `BIDDER_NODE_ADDRESS`: Your bidder node address (0x1234567890123456789012345678901234567890)
+- `P2P_KEY`: Your libp2p private key for P2P networking (your_p2p_private_key_here)
+
+**Bidder Service:**
+- `DOMAIN`: MEV-commit domain (testnet.mev-commit.xyz)
+- `SETTLEMENT_RPC_URL`: Settlement layer RPC URL (https://chainrpc.testnet.mev-commit.xyz/)
+- `LOG_LEVEL`: Logging level (info)
+- `LOG_FMT`: Log format (text)
+- `AUTO_DEPOSIT_AMOUNT`: Automatic deposit amount in wei (1000000000000000000)
+
+### Ports
+
+- **8545**: Ethereum JSON-RPC API (encrypted transaction submission)
+- **8080**: REST API (transaction status and decryption)
+- **23003**: P2P networking (Shutter Network communication)
+
+### Health Checks
+
+The Docker container includes health checks that verify the REST API is responding. You can monitor the health status with:
+
+```bash
+docker ps
+# Look for "healthy" status in the STATUS column
+```
