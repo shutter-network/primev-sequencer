@@ -164,7 +164,6 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 		defer bidTicker.Stop()
 
 		for {
-			var cancelFunc context.CancelFunc
 			select {
 			case <-statusTicker.C:
 				count := s.txStore.GetTransactionCount()
@@ -219,7 +218,7 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 							zlog.Error().Err(err).Msg("Failed to get identities")
 							continue
 						}
-						ctx, cancelFunc = context.WithTimeout(context.Background(), 2*time.Minute)
+						ctx, _ = context.WithTimeout(context.Background(), 2*time.Minute)
 
 						err = s.p2p.SendMessage(ctx, &p2pmsg.Commitment{
 							InstanceId:           s.instanceId,
@@ -251,7 +250,6 @@ func (s *Sequencer) Start(ctx context.Context, runner service.Runner) error {
 					}
 				}
 			case <-ctx.Done():
-				cancelFunc()
 				return
 			}
 		}
