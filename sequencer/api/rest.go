@@ -58,7 +58,7 @@ func (api *RestAPI) GetDecryptedTx(w http.ResponseWriter, r *http.Request) {
 
 	// Get txHash from URL path
 	// Expected path: /get_decrypted_tx/{txHash}
-	path := strings.TrimPrefix(r.URL.Path, "/get_decrypted_tx/")
+	path := strings.TrimPrefix(r.URL.Path, "/decrypted_tx/")
 	if path == "" || path == r.URL.Path {
 		api.sendErrorResponse(w, "txHash is required in path: "+path, http.StatusBadRequest)
 		return
