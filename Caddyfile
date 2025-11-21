@@ -1,0 +1,27 @@
+# Caddyfile for method-based routing
+{$SERVICE_DOMAIN_NAME} {
+    @get method GET
+    @post method POST
+    @other not method GET POST
+
+    route @get {
+        header Access-Control-Allow-Origin *
+        header Access-Control-Allow-Methods GET
+        header Access-Control-Allow-Headers Content-Type, Authorization
+        reverse_proxy sequencer:8080
+    }
+
+    route @post {
+        header Access-Control-Allow-Origin *
+        header Access-Control-Allow-Methods POST
+        header Access-Control-Allow-Headers Content-Type, Authorization
+        reverse_proxy sequencer:8545
+    }
+
+    route @other {
+        header Access-Control-Allow-Origin *
+        header Access-Control-Allow-Methods PUT, DELETE, PATCH, OPTIONS
+        header Access-Control-Allow-Headers Content-Type, Authorization
+        reverse_proxy sequencer:8080
+    }
+}
