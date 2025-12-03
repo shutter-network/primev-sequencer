@@ -132,12 +132,12 @@ func (s *RPCServer) handleRequest(w http.ResponseWriter, req *JSONRPCRequest) {
 			Interface("id", req.ID).
 			Msg("Handling request locally - transaction method not implemented")
 		s.handleSendTransaction(w, req)
-	case "shutter_getConfig":
+	case "eth_protocolVersion":
 		log.Info().
 			Str("method", req.Method).
 			Interface("id", req.ID).
-			Msg("Handling request locally - shutter get config")
-		s.handleGetConfig(w, req)
+			Msg("Handling request locally - protocol version")
+		s.handleGetProtocolVersion(w, req)
 	default:
 		s.proxyRequest(w, req)
 	}
@@ -233,11 +233,7 @@ func (s *RPCServer) handleSendTransaction(w http.ResponseWriter, req *JSONRPCReq
 	s.writeError(w, req.ID, -32601, "Method not implemented", "Use eth_sendRawTransaction instead")
 }
 
-func (s *RPCServer) handleGetConfig(w http.ResponseWriter, req *JSONRPCRequest) {
-	log.Info().
-		Str("method", req.Method).
-		Interface("id", req.ID).
-		Msg("Handling request locally - shutter get config")
+func (s *RPCServer) handleGetProtocolVersion(w http.ResponseWriter, req *JSONRPCRequest) {
 	s.writeSuccess(w, req.ID, "primev rpc server - v0.0.1")
 }
 
